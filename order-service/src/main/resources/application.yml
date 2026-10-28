@@ -45,6 +45,12 @@ pet:
   catalog:
     base-url: ${PET_CATALOG_URL:http://localhost:8080}
 
+jwt:
+  public-key: ${JWT_PUBLIC_KEY:}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+  issuer: ${JWT_ISSUER:pet-planet}
+  audience: ${JWT_AUDIENCE:pet-planet}
+
 springdoc:
   api-docs:
     path: /api-docs

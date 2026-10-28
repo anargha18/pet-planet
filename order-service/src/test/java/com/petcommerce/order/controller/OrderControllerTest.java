@@ -10,13 +10,16 @@ import com.petcommerce.order.entity.Species;
 import com.petcommerce.order.exception.InvalidOrderStateException;
 import com.petcommerce.order.exception.OrderNotFoundException;
 import com.petcommerce.order.exception.PetCatalogUnavailableException;
+import com.petcommerce.order.security.JwtService;
 import com.petcommerce.order.service.OrderService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -25,6 +28,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrderController.class)
+@Import(com.petcommerce.order.config.SecurityConfig.class)
+@EnableMethodSecurity
 class OrderControllerTest {
 
     @Autowired
@@ -46,6 +52,9 @@ class OrderControllerTest {
     @MockBean
     private PetCatalogClient petCatalogClient;
 
+    @MockBean
+    private JwtService jwtService;
+
     @Test
     void createOrderReturnsCreated() throws Exception {
         UUID petId = UUID.randomUUID();
@@ -59,11 +68,12 @@ class OrderControllerTest {
                 java.time.Instant.now()
         );
 
-        Mockito.when(orderService.create(any(CreateOrderRequest.class))).thenReturn(orderResponse);
+        Mockito.when(orderService.create(any(CreateOrderRequest.class), any())).thenReturn(orderResponse);
 
-        String body = "{\"customerId\":101,\"items\":[{\"petId\":\"" + petId + "\",\"quantity\":1}]}";
+        String body = "{\"items\":[{\"petId\":\"" + petId + "\",\"quantity\":1}]}";
 
         mockMvc.perform(post("/api/v1/orders")
+                        .with(user("customer@example.com").roles("CUSTOMER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
@@ -81,18 +91,20 @@ class OrderControllerTest {
                 java.time.Instant.now()
         );
 
-        Mockito.when(orderService.getOrder(1L)).thenReturn(orderResponse);
+        Mockito.when(orderService.getOrder(eq(1L), any())).thenReturn(orderResponse);
 
-        mockMvc.perform(get("/api/v1/orders/1"))
+        mockMvc.perform(get("/api/v1/orders/1")
+                        .with(user("customer@example.com").roles("CUSTOMER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
     }
 
     @Test
     void invalidRequestReturnsBadRequest() throws Exception {
-        String body = "{\"customerId\":null,\"items\":[]}";
+        String body = "{\"items\":[]}";
 
         mockMvc.perform(post("/api/v1/orders")
+                        .with(user("customer@example.com").roles("CUSTOMER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest());
@@ -100,28 +112,31 @@ class OrderControllerTest {
 
     @Test
     void notFoundReturns404() throws Exception {
-        Mockito.when(orderService.getOrder(999L)).thenThrow(new OrderNotFoundException(999L));
+        Mockito.when(orderService.getOrder(eq(999L), any())).thenThrow(new OrderNotFoundException(999L));
 
-        mockMvc.perform(get("/api/v1/orders/999"))
+        mockMvc.perform(get("/api/v1/orders/999")
+                        .with(user("customer@example.com").roles("CUSTOMER")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void cancelConflictReturns409() throws Exception {
-        Mockito.when(orderService.cancel(1L)).thenThrow(new InvalidOrderStateException(1L, "PAID"));
+        Mockito.when(orderService.cancel(eq(1L), any())).thenThrow(new InvalidOrderStateException(1L, "PAID"));
 
-        mockMvc.perform(patch("/api/v1/orders/1/cancel"))
+        mockMvc.perform(patch("/api/v1/orders/1/cancel")
+                        .with(user("customer@example.com").roles("CUSTOMER")))
                 .andExpect(status().isConflict());
     }
 
     @Test
     void petCatalogUnavailableReturns503() throws Exception {
-        Mockito.when(orderService.create(any(CreateOrderRequest.class)))
+        Mockito.when(orderService.create(any(CreateOrderRequest.class), any()))
                 .thenThrow(new PetCatalogUnavailableException("Pet Catalog service is unavailable"));
 
-        String body = "{\"customerId\":101,\"items\":[{\"petId\":\"" + UUID.randomUUID() + "\",\"quantity\":1}]}";
+        String body = "{\"items\":[{\"petId\":\"" + UUID.randomUUID() + "\",\"quantity\":1}]}";
 
         mockMvc.perform(post("/api/v1/orders")
+                        .with(user("customer@example.com").roles("CUSTOMER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isServiceUnavailable());

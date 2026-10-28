@@ -20,8 +20,11 @@ spring:
     locations: classpath:db/migration
 
 jwt:
-  secret: ${JWT_SECRET:change-me-please-use-a-long-secret}
+  private-key: ${JWT_PRIVATE_KEY:}
+  public-key: ${JWT_PUBLIC_KEY:}
   expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+  issuer: ${JWT_ISSUER:pet-planet}
+  audience: ${JWT_AUDIENCE:pet-planet}
 
 management:
   endpoints:

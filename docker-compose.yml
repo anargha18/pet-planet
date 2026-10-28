@@ -229,11 +229,55 @@ services:
       USER_DATABASE_PASSWORD: ${USER_DATABASE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:-change-me-please-use-a-long-secret}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      APP_CORS_ALLOWED_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
     ports:
       - "${USER_SERVICE_PORT:-8088}:8088"
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - pet-planet
+
+  gateway-service:
+    build:
+      context: ./gateway-service
+    container_name: pet-planet-gateway
+    restart: unless-stopped
+    environment:
+      GATEWAY_PORT: 8089
+      USER_SERVICE_URL: http://user-service:8088
+      PET_CATALOG_URL: http://pet-catalog-service:8080
+      ORDER_SERVICE_URL: http://order-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${GATEWAY_PORT:-8089}:8089"
+    depends_on:
+      pet-catalog-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+    networks:
+      - pet-planet
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: pet-planet-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
+      VITE_PET_CATALOG_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
+      VITE_ORDER_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
+      VITE_USER_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - gateway-service
     networks:
       - pet-planet
 

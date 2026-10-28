@@ -27,15 +27,24 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -65,12 +74,18 @@ public class OrderService {
 
     @Transactional
     public OrderResponse create(CreateOrderRequest request) {
+        return create(request, null);
+    }
+
+    @Transactional
+    public OrderResponse create(CreateOrderRequest request, Authentication authentication) {
         if (request.items() == null || request.items().isEmpty()) {
             throw new IllegalArgumentException("items must not be empty");
         }
 
+        Long customerId = resolveCustomerId(authentication);
         Order order = new Order();
-        order.setCustomerId(request.customerId());
+        order.setCustomerId(customerId);
         order.setStatus(OrderStatus.CREATED);
         order.setItems(new ArrayList<>());
 
@@ -107,19 +122,37 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(Long orderId) {
+        return getOrder(orderId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getOrder(Long orderId, Authentication authentication) {
         Order order = findOrder(orderId);
+        ensureOrderAccess(order, authentication);
         return toResponse(order);
     }
 
     @Transactional(readOnly = true)
     public Page<OrderResponse> getOrders(Long customerId, OrderStatus status, Pageable pageable) {
-        Specification<Order> specification = buildSpecification(customerId, status);
+        return getOrders(customerId, status, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> getOrders(Long customerId, OrderStatus status, Authentication authentication, Pageable pageable) {
+        Long effectiveCustomerId = resolveRequestedCustomerId(customerId, authentication);
+        Specification<Order> specification = buildSpecification(effectiveCustomerId, status);
         return orderRepository.findAll(specification, pageable).map(this::toResponse);
     }
 
     @Transactional
     public OrderResponse cancel(Long orderId) {
+        return cancel(orderId, null);
+    }
+
+    @Transactional
+    public OrderResponse cancel(Long orderId, Authentication authentication) {
         Order order = findOrder(orderId);
+        ensureOrderAccess(order, authentication);
         if (order.getStatus() != OrderStatus.CREATED) {
             throw new InvalidOrderStateException(orderId, order.getStatus().name());
         }
@@ -220,6 +253,69 @@ public class OrderService {
     private void validateQuantity(Integer quantity) {
         if (quantity == null || quantity != 1) {
             throw new IllegalArgumentException("quantity must always be 1 for a pet order item");
+        }
+    }
+
+    private Long resolveCustomerId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        return customerIdFromPrincipal(authentication.getName());
+    }
+
+    private Long resolveRequestedCustomerId(Long requestedCustomerId, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (hasRole(authentication, "ADMIN")) {
+            return requestedCustomerId;
+        }
+        Long principalCustomerId = resolveCustomerId(authentication);
+        if (requestedCustomerId != null && !requestedCustomerId.equals(principalCustomerId)) {
+            throw new AccessDeniedException("You can only list your own orders");
+        }
+        return principalCustomerId;
+    }
+
+    private void ensureOrderAccess(Order order, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (hasRole(authentication, "ADMIN")) {
+            return;
+        }
+        if (!hasRole(authentication, "CUSTOMER")) {
+            throw new AccessDeniedException("Insufficient permissions");
+        }
+        Long authenticatedCustomerId = resolveCustomerId(authentication);
+        if (!authenticatedCustomerId.equals(order.getCustomerId())) {
+            throw new AccessDeniedException("You are not allowed to access this order");
+        }
+    }
+
+    private boolean hasRole(Authentication authentication, String role) {
+        Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
+        for (GrantedAuthority authority : authorities) {
+            String authorityName = authority.getAuthority();
+            if (("ROLE_" + role).equalsIgnoreCase(authorityName) || role.equalsIgnoreCase(authorityName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Long customerIdFromPrincipal(String principalName) {
+        if (principalName == null || principalName.isBlank()) {
+            throw new AccessDeniedException("Authentication principal is missing");
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(principalName.trim().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
+            ByteBuffer buffer = ByteBuffer.wrap(hash, 0, Long.BYTES);
+            long value = buffer.getLong();
+            return Math.abs(value);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is required to derive the authenticated customer identity", ex);
         }
     }
 

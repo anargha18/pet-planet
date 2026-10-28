@@ -16,11 +16,23 @@ The project includes the core event-driven saga flow across multiple services:
 - Fulfillment operations service for fulfillment status aggregation and operational monitoring
 - User service for registration, authentication, JWT issuance, and protected user endpoints
 
-The system uses separate PostgreSQL databases per service, Kafka topics for domain events, and local transactional outboxes to publish events after commit.
+The system uses separate PostgreSQL databases per service, Kafka topics for domain events, and local transactional outboxes to publish events after commit. An API gateway now fronts the user, catalog, order, and inventory services to provide a single backend entry point for the frontend.
 
 ## Current step
 
 The user service is now in place to provide secure authentication and authorization, while the downstream event-driven workflow remains intact.
+
+## Run the frontend
+
+The React/Vite app is in [`frontend/`](frontend/).
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+The development server is available at `http://localhost:5173`. To create a production build, run `npm run build` from `frontend/`.
 
 ## Start infrastructure
 

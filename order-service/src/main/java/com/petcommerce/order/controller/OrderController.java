@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Set;
@@ -40,25 +41,26 @@ public class OrderController {
             @ApiResponse(responseCode = "409", description = "Pet unavailable"),
             @ApiResponse(responseCode = "503", description = "Pet Catalog unavailable")
     })
-    public OrderResponse createOrder(@Valid @RequestBody CreateOrderRequest request) {
-        return orderService.create(request);
+    public OrderResponse createOrder(Authentication authentication, @Valid @RequestBody CreateOrderRequest request) {
+        return orderService.create(request, authentication);
     }
 
     @GetMapping("/orders/{orderId}")
     @Operation(summary = "Get order by ID")
-    public OrderResponse getOrder(@PathVariable Long orderId) {
-        return orderService.getOrder(orderId);
+    public OrderResponse getOrder(Authentication authentication, @PathVariable Long orderId) {
+        return orderService.getOrder(orderId, authentication);
     }
 
     @GetMapping("/orders")
     @Operation(summary = "List customer orders")
     public Page<OrderResponse> listOrders(
+            Authentication authentication,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) OrderStatus status,
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         validateSort(pageable);
-        return orderService.getOrders(customerId, status, pageable);
+        return orderService.getOrders(customerId, status, authentication, pageable);
     }
 
     private void validateSort(Pageable pageable) {
@@ -72,7 +74,7 @@ public class OrderController {
 
     @PatchMapping("/orders/{orderId}/cancel")
     @Operation(summary = "Cancel an order")
-    public OrderResponse cancelOrder(@PathVariable Long orderId) {
-        return orderService.cancel(orderId);
+    public OrderResponse cancelOrder(Authentication authentication, @PathVariable Long orderId) {
+        return orderService.cancel(orderId, authentication);
     }
 }
