@@ -22,6 +22,13 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     admin:
       auto-create: true
+    consumer:
+      group-id: pet-catalog-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -37,7 +44,7 @@ management:
         enabled: true
 
 jwt:
-  public-key: ${JWT_PUBLIC_KEY:}
+  public-key: ${JWT_PUBLIC_KEY:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt9Qd3JRuwbvkFIB4U+6dQkhz7RQHMteKjzAU5RvGnGhfBdHSLQWog1SVKSj7RpDLf7iURjILVlhYOtroubLgmHDJRkVolQUshYM95F8QRjLUQK3Sezqck5WWZxzm4T3lRGE+kwNLldzjvbDwT1NwZygNX8nBFcRx7jPE24ZNxQSN461Za7Oho13NY//+L72bbcMp9c0lOgxoT/hJbRRx2BGHU/KXJ7LBZaWIDQS5KyhPd64jTmwptgyXUa8QfsmLuTJhbqBI+MosdRDqAlssFtoA0LOgsyivOah1ZlI2E4sxKE8XH1f6jOSvWMTukcosHjf+zgLCggFywvdHc80TgQIDAQAB}
   expiration-ms: ${JWT_EXPIRATION_MS:3600000}
   issuer: ${JWT_ISSUER:pet-planet}
   audience: ${JWT_AUDIENCE:pet-planet}

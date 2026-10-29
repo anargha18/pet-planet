@@ -16,7 +16,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -85,6 +84,34 @@ class FulfillmentServiceTest {
         assertEquals(FulfillmentStatus.SHIPPED, record.getStatus());
         assertEquals("PET-888-TRACKING", record.getTrackingNumber());
         verify(fulfillmentRecordRepository, atLeastOnce()).save(any(FulfillmentRecord.class));
+    }
+
+    @Test
+    void handleDeliveryStatusUpdatedEventUpdatesExistingRecordToDelivered() {
+        UUID eventId = UUID.randomUUID();
+        Long orderId = 889L;
+        FulfillmentRecord existing = new FulfillmentRecord(orderId, 101L, "PET-889-TRACKING", FulfillmentStatus.SHIPPED, "Initial");
+        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(fulfillmentRecordRepository.findByOrderId(orderId)).thenReturn(Optional.of(existing));
+
+        DeliveryStatusUpdatedEvent event = new DeliveryStatusUpdatedEvent(
+                eventId,
+                "DeliveryStatusUpdatedEvent",
+                1,
+                UUID.randomUUID(),
+                Instant.now(),
+                UUID.randomUUID(),
+                orderId,
+                UUID.randomUUID(),
+                "PET-889-TRACKING",
+                "DELIVERED"
+        );
+
+        FulfillmentRecord record = fulfillmentService.handleDeliveryStatusUpdatedEvent(event);
+
+        assertNotNull(record);
+        assertEquals(FulfillmentStatus.DELIVERED, record.getStatus());
+        verify(fulfillmentRecordRepository, atLeastOnce()).save(existing);
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.petcommerce.shipping.service.ShippingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,5 +31,10 @@ public class ShippingController {
     @GetMapping("/shipments/customer/{customerId}")
     public ResponseEntity<List<Shipment>> getShipmentsForCustomer(@PathVariable Long customerId) {
         return ResponseEntity.ok(shippingService.getShipmentsByCustomerId(customerId));
+    }
+
+    @PutMapping("/shipments/order/{orderId}/delivered")
+    public ResponseEntity<Shipment> markShipmentDelivered(@PathVariable Long orderId) {
+        return ResponseEntity.ok(shippingService.markDelivered(orderId));
     }
 }

@@ -15,5 +15,7 @@ public interface PetInventoryRepository extends JpaRepository<PetInventory, UUID
 
     Optional<PetInventory> findByPetId(UUID petId);
 
+    List<PetInventory> findByOrderId(Long orderId);
+
     List<PetInventory> findByStatusAndReservationExpiresAtBefore(InventoryStatus status, Instant before);
 }

@@ -1,71 +1,44 @@
 # Pet Planet
 
-Event-driven pet e-commerce learning project built incrementally with Java 17, Spring Boot, PostgreSQL, Kafka, Docker Compose, and Maven.
+Event-driven pet e-commerce platform built with Java 17, Spring Boot 3.5.5, Spring Cloud Gateway, PostgreSQL 16, Apache Kafka 4.0.1 (KRaft), and React 18 / Vite.
 
-## Current architecture
+## Architecture Highlights
 
-The project includes the core event-driven saga flow across multiple services:
+- **API Gateway (`gateway-service`, `:8089`)**: Unified entrypoint routing `/api/v1/auth`, `/api/v1/users`, `/api/v1/pets`, `/api/v1/orders`, `/api/v1/inventory`, `/api/v1/payments`, `/api/v1/notifications`, `/api/v1/shipments`, `/api/v1/deliveries`, and `/api/v1/fulfillment`.
+- **Stateless RS256 JWT Authentication (`user-service`, `:8088`)**: Issues RSA-signed JWTs (`JWT_PRIVATE_KEY`) verified independently by downstream services (`JWT_PUBLIC_KEY`).
+- **Choreographed Checkout Saga with Compensating Rollbacks**:
+  1. `order-service` (`:8081`) validates catalog availability, snapshots pet pricing, saves the order (`CREATED`), and publishes `OrderCreatedEvent` via its transactional outbox (`order-created-events`).
+  2. `inventory-service` (`:8082`) atomically reserves all pets in the order using optimistic locking (`@Version`), synchronizes `pet-catalog-service` (`:8080`) via `inventory-status-events`, and emits `PetReservedEvent` (`pet-reserved-events`).
+  3. `payment-service` (`:8083`) processes the exact order `totalAmount` and publishes `PaymentSucceededEvent` or `PaymentFailedEvent`.
+  4. On payment success, `order-service` transitions the order to `PAID` and publishes `OrderConfirmedEvent` (`order-confirmed-events`), triggering `inventory-service` (marks `SOLD`), `notification-service` (`:8084`), and `shipping-service` (`:8085`) -> `delivery-tracking-service` (`:8086`) -> `fulfillment-service` (`:8087`).
+  5. On reservation failure, 5-minute reservation expiry, payment decline, or order cancellation, compensating events automatically roll back inventory reservations and update catalog availability.
+- **Transactional Outbox Relay + Idempotent Consumers**: Every event-producing service persists outbox rows in the local PostgreSQL transaction, marks `published_at` upon Kafka broker acknowledgment, and runs a `@Scheduled` outbox poller for retry resilience alongside `processed_events` deduplication tables.
 
-- Pet catalog service for product inventory and pet metadata
-- Order service for order lifecycle and saga state transitions
-- Inventory service for reservation, expiry, and sold-state tracking
-- Payment service with simulated payment outcomes and outbox publishing
-- Notification service for order-confirmed handling and customer notification records
-- Shipping service for fulfilment handoff and tracking-number creation
-- Delivery tracking service for downstream delivery status monitoring and lookup
-- Fulfillment operations service for fulfillment status aggregation and operational monitoring
-- User service for registration, authentication, JWT issuance, and protected user endpoints
-
-The system uses separate PostgreSQL databases per service, Kafka topics for domain events, and local transactional outboxes to publish events after commit. An API gateway now fronts the user, catalog, order, and inventory services to provide a single backend entry point for the frontend.
-
-## Current step
-
-The user service is now in place to provide secure authentication and authorization, while the downstream event-driven workflow remains intact.
-
-## Run the frontend
-
-The React/Vite app is in [`frontend/`](frontend/).
-
-```sh
-cd frontend
-npm ci
-npm run dev
-```
-
-The development server is available at `http://localhost:5173`. To create a production build, run `npm run build` from `frontend/`.
-
-## Start infrastructure
+## Quickstart
 
 ```sh
 cp .env.example .env
-docker compose up -d
+docker compose up -d --build
 docker compose ps
 ```
 
-The `.env` file is intentionally untracked and should contain local development credentials.
+### Seeded Accounts & Sample Catalog
 
-Connection endpoints from the host:
+Flyway migrations automatically seed **6 sample pets** (3 dogs, 3 cats) and **2 default accounts**:
 
-- PostgreSQL: `localhost:5432`
-- Kafka: `localhost:9092`
-- Pet Catalog API: `http://localhost:8080/api/v1/pets`
-- Order API: `http://localhost:8081/api/v1/orders`
-- Inventory API: `http://localhost:8082/api/v1/inventory`
-- Payment API: `http://localhost:8083/api/v1/payments`
-- Notification API: `http://localhost:8084/api/v1/notifications`
-- Shipping API: `http://localhost:8085/api/v1/shipments`
-- Delivery Tracking API: `http://localhost:8086/api/v1/deliveries`
-- Fulfillment API: `http://localhost:8087/api/v1/fulfillment`
-- User API: `http://localhost:8088/api/v1/auth` and `/api/v1/users`
+- **Customer Account**: `customer@petplanet.com` / `password123`
+- **Admin Account**: `admin@petplanet.com` / `password123`
 
-## Stop infrastructure
+### Endpoints
 
-```sh
-docker compose down
-```
-
-To remove local persisted data as well:
-
-```sh
-docker compose down -v
-```
+- **React Storefront**: `http://localhost:5173`
+- **API Gateway**: `http://localhost:8089`
+- **Pet Catalog Service**: `http://localhost:8080/api/v1/pets`
+- **Order Service**: `http://localhost:8081/api/v1/orders`
+- **Inventory Service**: `http://localhost:8082/api/v1/inventory`
+- **Payment Service**: `http://localhost:8083/api/v1/payments/order/{orderId}`
+- **Notification Service**: `http://localhost:8084/api/v1/notifications`
+- **Shipping Service**: `http://localhost:8085/api/v1/shipments`
+- **Delivery Tracking Service**: `http://localhost:8086/api/v1/deliveries`
+- **Fulfillment Service**: `http://localhost:8087/api/v1/fulfillment`
+- **User Service**: `http://localhost:8088/api/v1/auth` and `/api/v1/users`

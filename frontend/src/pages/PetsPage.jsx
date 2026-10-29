@@ -18,7 +18,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { extractApiError, getPets } from '../services/api';
 
 const getCurrencyLabel = (value) =>
@@ -28,12 +28,16 @@ const getCurrencyLabel = (value) =>
   }).format(Number(value || 0));
 
 function PetsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSpecies = searchParams.get('species');
   const [pets, setPets] = useState([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [speciesFilter, setSpeciesFilter] = useState('ALL');
+  const [speciesFilter, setSpeciesFilter] = useState(
+    initialSpecies === 'CAT' || initialSpecies === 'DOG' ? initialSpecies : 'ALL'
+  );
   const [sortMode, setSortMode] = useState('featured');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -58,8 +62,26 @@ function PetsPage() {
   };
 
   useEffect(() => {
-    fetchPets(page, speciesFilter);
-  }, [speciesFilter]);
+    const querySpecies = searchParams.get('species');
+    if (querySpecies === 'CAT' || querySpecies === 'DOG') {
+      if (querySpecies !== speciesFilter) {
+        setSpeciesFilter(querySpecies);
+        return;
+      }
+    }
+    fetchPets(0, speciesFilter);
+  }, [speciesFilter, searchParams]);
+
+  const handleSpeciesChange = (event) => {
+    const next = event.target.value;
+    setSpeciesFilter(next);
+    setPage(0);
+    if (next === 'ALL') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ species: next });
+    }
+  };
 
   const filteredPets = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -121,7 +143,7 @@ function PetsPage() {
               id="species-filter"
               value={speciesFilter}
               label="Species"
-              onChange={(event) => setSpeciesFilter(event.target.value)}
+              onChange={handleSpeciesChange}
             >
               <MenuItem value="ALL">All</MenuItem>
               <MenuItem value="CAT">Cats</MenuItem>
@@ -158,6 +180,7 @@ function PetsPage() {
               setSearchTerm('');
               setSpeciesFilter('ALL');
               setSortMode('featured');
+              setSearchParams({});
             }}>
               Reset filters
             </Button>
@@ -202,7 +225,7 @@ function PetsPage() {
 
             <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
               <Pagination
-                page={page}
+                page={page + 1}
                 count={Math.max(totalPages, 1)}
                 color="primary"
                 onChange={handlePageChange}

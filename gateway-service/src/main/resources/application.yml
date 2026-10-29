@@ -7,10 +7,19 @@ spring:
   cloud:
     gateway:
       globalcors:
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
-            allowedOrigins: "${FRONTEND_ORIGIN:http://localhost:5173}"
-            allowedMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+            allowedMethods:
+              - "GET"
+              - "POST"
+              - "PUT"
+              - "PATCH"
+              - "DELETE"
+              - "OPTIONS"
             allowedHeaders: "*"
             allowCredentials: true
 
@@ -29,3 +38,8 @@ gateway:
   pet-catalog-url: ${PET_CATALOG_URL:http://localhost:8080}
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8081}
   inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+  payment-service-url: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+  notification-service-url: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
+  shipping-service-url: ${SHIPPING_SERVICE_URL:http://localhost:8085}
+  delivery-service-url: ${DELIVERY_SERVICE_URL:http://localhost:8086}
+  fulfillment-service-url: ${FULFILLMENT_SERVICE_URL:http://localhost:8087}

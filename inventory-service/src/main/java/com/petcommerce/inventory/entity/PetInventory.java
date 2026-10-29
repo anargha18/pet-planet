@@ -34,6 +34,9 @@ public class PetInventory {
     @Column(nullable = false)
     private InventoryStatus status;
 
+    @Column(name = "order_id")
+    private Long orderId;
+
     @Column(name = "reservation_id")
     private UUID reservationId;
 
@@ -92,6 +95,14 @@ public class PetInventory {
 
     public void setStatus(InventoryStatus status) {
         this.status = status;
+    }
+
+    public Long getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(Long orderId) {
+        this.orderId = orderId;
     }
 
     public UUID getReservationId() {

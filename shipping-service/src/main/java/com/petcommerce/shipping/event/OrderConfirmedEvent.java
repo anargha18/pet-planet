@@ -13,7 +13,21 @@ public record OrderConfirmedEvent(
         Instant timestamp,
         UUID correlationId,
         Long orderId,
+        Long customerId,
         List<UUID> petIds,
         BigDecimal totalAmount
 ) {
+    public OrderConfirmedEvent(
+            UUID eventId,
+            String eventType,
+            Integer eventVersion,
+            UUID aggregateId,
+            Instant timestamp,
+            UUID correlationId,
+            Long orderId,
+            List<UUID> petIds,
+            BigDecimal totalAmount
+    ) {
+        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, 101L, petIds, totalAmount);
+    }
 }

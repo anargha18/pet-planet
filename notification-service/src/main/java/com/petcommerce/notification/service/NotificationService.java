@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -38,10 +39,10 @@ public class NotificationService {
     private final ObjectMapper objectMapper;
 
     public NotificationService(NotificationRepository notificationRepository,
-                              ProcessedEventRepository processedEventRepository,
-                              NotificationOutboxRepository notificationOutboxRepository,
-                              KafkaTemplate<String, Object> kafkaTemplate,
-                              ObjectMapper objectMapper) {
+                               ProcessedEventRepository processedEventRepository,
+                               NotificationOutboxRepository notificationOutboxRepository,
+                               KafkaTemplate<String, Object> kafkaTemplate,
+                               ObjectMapper objectMapper) {
         this.notificationRepository = notificationRepository;
         this.processedEventRepository = processedEventRepository;
         this.notificationOutboxRepository = notificationOutboxRepository;
@@ -82,7 +83,7 @@ public class NotificationService {
             return existing;
         }
 
-        Long customerId = 101L;
+        Long customerId = event.customerId() != null ? event.customerId() : 101L;
         String message = "Your pet order " + event.orderId() + " has been confirmed and is on the way!";
         Notification notification = new Notification(event.orderId(), customerId, message, NotificationStatus.PENDING);
         notificationRepository.save(notification);
@@ -104,12 +105,12 @@ public class NotificationService {
         notificationRepository.save(notification);
         publishAfterCommit(NOTIFICATION_SENT_TOPIC, event.orderId().toString(), sentEvent, notification.getId(), event.orderId(), event.correlationId());
 
-        log.info("Notification sent for order {} with notification {}", event.orderId(), notification.getId());
+        log.info("Notification sent for order {} (customer {}) with notification {}", event.orderId(), customerId, notification.getId());
         return notification;
     }
 
     private void publishAfterCommit(String topic, String key, Object event, UUID notificationId, Long orderId, UUID correlationId) {
-        notificationOutboxRepository.save(new NotificationOutboxEvent(
+        NotificationOutboxEvent outbox = new NotificationOutboxEvent(
                 UUID.randomUUID(),
                 topic,
                 event.getClass().getSimpleName(),
@@ -117,19 +118,52 @@ public class NotificationService {
                 correlationId,
                 serializePayload(event),
                 Instant.now()
-        ));
+        );
+        notificationOutboxRepository.save(outbox);
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    kafkaTemplate.send(topic, key, event);
+                    sendAndMarkPublished(outbox, key, event);
                 }
             });
             return;
         }
+        sendAndMarkPublished(outbox, key, event);
+    }
 
-        kafkaTemplate.send(topic, key, event);
+    private void sendAndMarkPublished(NotificationOutboxEvent outbox, String key, Object event) {
+        try {
+            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
+            if (future != null) {
+                future.whenComplete((result, ex) -> {
+                    if (ex == null) {
+                        outbox.setPublishedAt(Instant.now());
+                        notificationOutboxRepository.save(outbox);
+                    }
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("Deferred notification outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${notification.outbox-poll-delay-ms:5000}")
+    @Transactional
+    public void relayOutboxEvents() {
+        List<NotificationOutboxEvent> pending = notificationOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
+        for (NotificationOutboxEvent outbox : pending) {
+            try {
+                Object payloadObj = objectMapper.readTree(outbox.getPayload());
+                String key = outbox.getOrderId() != null ? outbox.getOrderId().toString() : outbox.getEventId().toString();
+                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
+                outbox.setPublishedAt(Instant.now());
+                notificationOutboxRepository.save(outbox);
+            } catch (Exception ex) {
+                log.warn("Failed to relay notification outbox event {}: {}", outbox.getEventId(), ex.getMessage());
+            }
+        }
     }
 
     private String serializePayload(Object event) {

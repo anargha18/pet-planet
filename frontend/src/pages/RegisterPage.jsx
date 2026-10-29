@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { extractApiError, registerUser } from '../services/api';
 
 const initialState = {
@@ -24,6 +25,7 @@ const initialState = {
 
 function RegisterPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [form, setForm] = useState(initialState);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,8 +41,22 @@ function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      await registerUser(form);
-      navigate('/login');
+      const authResponse = await registerUser(form);
+      if (authResponse?.token) {
+        login({
+          token: authResponse.token,
+          tokenType: authResponse.tokenType,
+          role: authResponse.role,
+          email: authResponse.email,
+          user: {
+            email: authResponse.email,
+            role: authResponse.role,
+          },
+        });
+        navigate('/');
+      } else {
+        navigate('/login');
+      }
     } catch (apiError) {
       setError(extractApiError(apiError));
     } finally {

@@ -25,7 +25,7 @@ import { useCart } from '../context/CartContext';
 const navItems = [
   { label: 'Home', path: '/' },
   { label: 'Browse Pets', path: '/pets' },
-  { label: 'Cart', path: '/cart' },
+  { label: 'Orders', path: '/orders' },
 ];
 
 function Layout() {
@@ -184,6 +184,7 @@ function Layout() {
             <Stack direction="row" spacing={3} flexWrap="wrap">
               <Button component={Link} to="/" color="inherit">Home</Button>
               <Button component={Link} to="/pets" color="inherit">Browse Pets</Button>
+              <Button component={Link} to="/orders" color="inherit">Orders</Button>
               <Button component={Link} to="/login" color="inherit">Login</Button>
               <Button component={Link} to="/register" color="inherit">Register</Button>
             </Stack>

@@ -13,9 +13,14 @@ import com.petcommerce.order.entity.OrderItem;
 import com.petcommerce.order.entity.OrderOutboxEvent;
 import com.petcommerce.order.entity.OrderStatus;
 import com.petcommerce.order.entity.Species;
+import com.petcommerce.order.event.OrderCancelledEvent;
 import com.petcommerce.order.event.OrderConfirmedEvent;
+import com.petcommerce.order.event.OrderCreatedEvent;
 import com.petcommerce.order.event.PaymentFailedEvent;
 import com.petcommerce.order.event.PaymentSucceededEvent;
+import com.petcommerce.order.event.PetReservationExpiredEvent;
+import com.petcommerce.order.event.PetReservationFailedEvent;
+import com.petcommerce.order.event.PetReservedEvent;
 import com.petcommerce.order.exception.InvalidOrderStateException;
 import com.petcommerce.order.exception.OrderNotFoundException;
 import com.petcommerce.order.exception.PetUnavailableException;
@@ -27,6 +32,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -45,7 +51,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -116,7 +121,9 @@ public class OrderService {
 
         order.setTotalAmount(total);
         Order savedOrder = orderRepository.save(order);
-        log.info("Created order {} for customer {} with total {}", savedOrder.getId(), savedOrder.getCustomerId(), savedOrder.getTotalAmount());
+        publishOrderCreatedAfterCommit(savedOrder);
+        log.info("Created order {} for customer {} with total {} and queued OrderCreatedEvent",
+                savedOrder.getId(), savedOrder.getCustomerId(), savedOrder.getTotalAmount());
         return toResponse(savedOrder);
     }
 
@@ -153,13 +160,53 @@ public class OrderService {
     public OrderResponse cancel(Long orderId, Authentication authentication) {
         Order order = findOrder(orderId);
         ensureOrderAccess(order, authentication);
-        if (order.getStatus() != OrderStatus.CREATED) {
+        if (order.getStatus() != OrderStatus.CREATED && order.getStatus() != OrderStatus.PAYMENT_PENDING) {
             throw new InvalidOrderStateException(orderId, order.getStatus().name());
         }
         order.setStatus(OrderStatus.CANCELLED);
         Order updated = orderRepository.save(order);
-        log.info("Cancelled order {}", updated.getId());
+        publishOrderCancelledAfterCommit(updated);
+        log.info("Cancelled order {} and queued OrderCancelledEvent", updated.getId());
         return toResponse(updated);
+    }
+
+    @Transactional
+    public void handlePetReserved(PetReservedEvent event) {
+        if (event == null || event.orderId() == null) {
+            return;
+        }
+        Order order = findOrder(event.orderId());
+        if (order.getStatus() == OrderStatus.CREATED) {
+            order.setStatus(OrderStatus.PAYMENT_PENDING);
+            orderRepository.save(order);
+            log.info("Order {} transitioned to PAYMENT_PENDING after pet reservation {}", order.getId(), event.reservationId());
+        }
+    }
+
+    @Transactional
+    public void handlePetReservationFailed(PetReservationFailedEvent event) {
+        if (event == null || event.orderId() == null) {
+            return;
+        }
+        Order order = findOrder(event.orderId());
+        if (order.getStatus() == OrderStatus.CREATED || order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+            order.setStatus(OrderStatus.FAILED);
+            orderRepository.save(order);
+            log.warn("Order {} marked as FAILED due to inventory reservation failure: {}", order.getId(), event.reason());
+        }
+    }
+
+    @Transactional
+    public void handlePetReservationExpired(PetReservationExpiredEvent event) {
+        if (event == null || event.orderId() == null) {
+            return;
+        }
+        Order order = findOrder(event.orderId());
+        if (order.getStatus() == OrderStatus.CREATED || order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+            order.setStatus(OrderStatus.CANCELLED);
+            orderRepository.save(order);
+            log.warn("Order {} marked as CANCELLED after inventory reservation expired", order.getId());
+        }
     }
 
     @Transactional
@@ -202,6 +249,53 @@ public class OrderService {
         log.warn("Order {} marked as FAILED after payment {} failed: {}", order.getId(), event.paymentId(), event.reason());
     }
 
+    private void publishOrderCreatedAfterCommit(Order order) {
+        if (order.getId() == null) {
+            return;
+        }
+        UUID eventId = UUID.randomUUID();
+        UUID correlationId = UUID.randomUUID();
+        List<UUID> petIds = order.getItems().stream()
+                .map(OrderItem::getPetId)
+                .toList();
+        OrderCreatedEvent event = new OrderCreatedEvent(
+                eventId,
+                "OrderCreatedEvent",
+                1,
+                UUID.randomUUID(),
+                Instant.now(),
+                correlationId,
+                order.getId(),
+                order.getCustomerId(),
+                petIds,
+                order.getTotalAmount()
+        );
+        saveAndPublishOutbox(eventId, "order-created-events", "OrderCreatedEvent", order.getId(), correlationId, event);
+    }
+
+    private void publishOrderCancelledAfterCommit(Order order) {
+        if (order.getId() == null) {
+            return;
+        }
+        UUID eventId = UUID.randomUUID();
+        UUID correlationId = UUID.randomUUID();
+        List<UUID> petIds = order.getItems().stream()
+                .map(OrderItem::getPetId)
+                .toList();
+        OrderCancelledEvent event = new OrderCancelledEvent(
+                eventId,
+                "OrderCancelledEvent",
+                1,
+                UUID.randomUUID(),
+                Instant.now(),
+                correlationId,
+                order.getId(),
+                order.getCustomerId(),
+                petIds
+        );
+        saveAndPublishOutbox(eventId, "order-cancelled-events", "OrderCancelledEvent", order.getId(), correlationId, event);
+    }
+
     private void publishOrderConfirmedAfterCommit(Order order, UUID correlationId) {
         UUID eventId = UUID.randomUUID();
         List<UUID> petIds = order.getItems().stream()
@@ -215,31 +309,78 @@ public class OrderService {
                 Instant.now(),
                 correlationId,
                 order.getId(),
+                order.getCustomerId(),
                 petIds,
                 order.getTotalAmount()
         );
+        saveAndPublishOutbox(eventId, "order-confirmed-events", "OrderConfirmedEvent", order.getId(), correlationId, event);
+    }
 
-        orderOutboxRepository.save(new OrderOutboxEvent(
+    private void saveAndPublishOutbox(UUID eventId, String topic, String eventType, Long orderId, UUID correlationId, Object event) {
+        OrderOutboxEvent outbox = new OrderOutboxEvent(
                 eventId,
-                "order-confirmed-events",
-                "OrderConfirmedEvent",
-                order.getId(),
+                topic,
+                eventType,
+                orderId,
                 correlationId,
                 serializePayload(event),
                 Instant.now()
-        ));
+        );
+        orderOutboxRepository.save(outbox);
 
+        String key = orderId != null ? orderId.toString() : eventId.toString();
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    kafkaTemplate.send("order-confirmed-events", order.getId().toString(), event);
+                    sendAndMarkPublished(outbox, key, event);
                 }
             });
             return;
         }
+        sendAndMarkPublished(outbox, key, event);
+    }
 
-        kafkaTemplate.send("order-confirmed-events", order.getId().toString(), event);
+    private void sendAndMarkPublished(OrderOutboxEvent outbox, String key, Object event) {
+        try {
+            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
+            if (future != null) {
+                future.whenComplete((result, ex) -> {
+                    if (ex == null) {
+                        outbox.setPublishedAt(Instant.now());
+                        orderOutboxRepository.save(outbox);
+                    }
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("Deferred outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${order.outbox-poll-delay-ms:5000}")
+    @Transactional
+    public void relayOutboxEvents() {
+        List<OrderOutboxEvent> pending = orderOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
+        for (OrderOutboxEvent outbox : pending) {
+            try {
+                Object payloadObj = deserializeOutboxPayload(outbox);
+                String key = outbox.getOrderId() != null ? outbox.getOrderId().toString() : outbox.getEventId().toString();
+                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
+                outbox.setPublishedAt(Instant.now());
+                orderOutboxRepository.save(outbox);
+            } catch (Exception ex) {
+                log.warn("Failed to relay order outbox event {}: {}", outbox.getEventId(), ex.getMessage());
+            }
+        }
+    }
+
+    private Object deserializeOutboxPayload(OrderOutboxEvent outbox) throws JsonProcessingException {
+        return switch (outbox.getEventType()) {
+            case "OrderCreatedEvent" -> objectMapper.readValue(outbox.getPayload(), OrderCreatedEvent.class);
+            case "OrderCancelledEvent" -> objectMapper.readValue(outbox.getPayload(), OrderCancelledEvent.class);
+            case "OrderConfirmedEvent" -> objectMapper.readValue(outbox.getPayload(), OrderConfirmedEvent.class);
+            default -> objectMapper.readTree(outbox.getPayload());
+        };
     }
 
     private String serializePayload(Object event) {
@@ -313,7 +454,7 @@ public class OrderService {
             byte[] hash = digest.digest(principalName.trim().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
             ByteBuffer buffer = ByteBuffer.wrap(hash, 0, Long.BYTES);
             long value = buffer.getLong();
-            return Math.abs(value);
+            return value == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(value);
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is required to derive the authenticated customer identity", ex);
         }

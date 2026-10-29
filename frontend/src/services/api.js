@@ -55,6 +55,34 @@ export const createOrder = async (payload, token) => {
   return response.data;
 };
 
+export const getOrders = async (token, params = {}) => {
+  const response = await orderApi.get('/api/v1/orders', {
+    ...getAuthHeaders(token),
+    params,
+  });
+  return response.data;
+};
+
+export const cancelOrder = async (orderId, token) => {
+  const response = await orderApi.patch(`/api/v1/orders/${orderId}/cancel`, {}, getAuthHeaders(token));
+  return response.data;
+};
+
+export const getPaymentByOrderId = async (orderId) => {
+  const response = await orderApi.get(`/api/v1/payments/order/${orderId}`);
+  return response.data;
+};
+
+export const getShipmentByOrderId = async (orderId) => {
+  const response = await orderApi.get(`/api/v1/shipments/order/${orderId}`);
+  return response.data;
+};
+
+export const getNotificationByOrderId = async (orderId) => {
+  const response = await orderApi.get(`/api/v1/notifications/order/${orderId}`);
+  return response.data;
+};
+
 export const extractApiError = (error) => {
   const responseData = error?.response?.data;
 

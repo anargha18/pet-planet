@@ -89,7 +89,7 @@ function CheckoutPage() {
             </Button>
           </CardContent>
         </Card>
-      </Container>
+            </Container>
     );
   }
 
@@ -99,22 +99,27 @@ function CheckoutPage() {
         <Card>
           <CardContent sx={{ p: 4 }}>
             <Typography variant="overline" color="success.main" sx={{ fontWeight: 700, letterSpacing: '0.16em' }}>
-              Order created
+              Order created &amp; saga started
             </Typography>
             <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.05em', mb: 2 }}>
               Thanks for your purchase
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Your order was successfully created in the backend order service.
+              Your order was created and published to the event-driven reservation, payment, and shipping pipeline.
             </Typography>
             <Stack spacing={1}>
               <Typography><strong>Order ID:</strong> {orderResult.id}</Typography>
-              <Typography><strong>Status:</strong> {orderResult.status}</Typography>
+              <Typography><strong>Initial Status:</strong> {orderResult.status}</Typography>
               <Typography><strong>Total:</strong> {getCurrencyLabel(orderResult.totalAmount)}</Typography>
             </Stack>
-            <Button variant="contained" sx={{ mt: 3 }} onClick={() => navigate('/pets')}>
-              Continue shopping
-            </Button>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 3 }}>
+              <Button variant="contained" onClick={() => navigate('/orders')}>
+                View Order &amp; Tracking
+              </Button>
+              <Button variant="outlined" onClick={() => navigate('/pets')}>
+                Continue shopping
+              </Button>
+            </Stack>
           </CardContent>
         </Card>
       </Container>
@@ -154,7 +159,7 @@ function CheckoutPage() {
         <Grid item xs={12} md={5}>
           <Card>
             <CardContent sx={{ p: 4 }}>
-              <Typography variant="h5" sx={{ fontWeight: 800, mb: 3 }}>
+              <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.05em', mb: 3 }}>
                 Selected companions
               </Typography>
               <Stack spacing={2}>

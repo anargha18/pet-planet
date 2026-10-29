@@ -6,18 +6,22 @@ import com.petcommerce.catalog.dto.UpdatePetRequest;
 import com.petcommerce.catalog.entity.AvailabilityStatus;
 import com.petcommerce.catalog.entity.Pet;
 import com.petcommerce.catalog.entity.Species;
+import com.petcommerce.catalog.event.PetCatalogEvent;
 import com.petcommerce.catalog.exception.PetNotFoundException;
 import com.petcommerce.catalog.repository.PetRepository;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.UUID;
 
@@ -27,9 +31,15 @@ public class PetService {
     private static final Logger log = LoggerFactory.getLogger(PetService.class);
 
     private final PetRepository petRepository;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     public PetService(PetRepository petRepository) {
         this.petRepository = petRepository;
+    }
+
+    @Autowired(required = false)
+    public void setKafkaTemplate(KafkaTemplate<String, Object> kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @Transactional
@@ -39,8 +49,37 @@ public class PetService {
         pet.setAvailabilityStatus(AvailabilityStatus.AVAILABLE);
         Pet savedPet = petRepository.save(pet);
         log.info("Created pet id={}, species={}, availabilityStatus={}",
-            savedPet.getId(), savedPet.getSpecies(), savedPet.getAvailabilityStatus());
+                savedPet.getId(), savedPet.getSpecies(), savedPet.getAvailabilityStatus());
+        if (kafkaTemplate != null && savedPet.getId() != null) {
+            kafkaTemplate.send("pet-catalog-events", savedPet.getId().toString(), new PetCatalogEvent(
+                    UUID.randomUUID(),
+                    "PetCreatedEvent",
+                    1,
+                    savedPet.getId(),
+                    savedPet.getAvailabilityStatus().name(),
+                    Instant.now()
+            ));
+        }
         return toResponse(savedPet);
+    }
+
+    @Transactional
+    public void syncAvailabilityStatus(UUID petId, String statusValue) {
+        if (petId == null || statusValue == null) {
+            return;
+        }
+        petRepository.findById(petId).ifPresent(pet -> {
+            try {
+                AvailabilityStatus nextStatus = AvailabilityStatus.valueOf(statusValue.toUpperCase());
+                if (pet.getAvailabilityStatus() != nextStatus) {
+                    pet.setAvailabilityStatus(nextStatus);
+                    petRepository.save(pet);
+                    log.info("Synchronized catalog pet {} availabilityStatus to {}", petId, nextStatus);
+                }
+            } catch (IllegalArgumentException ex) {
+                log.warn("Ignoring unknown availability status {} for pet {}", statusValue, petId);
+            }
+        });
     }
 
     @Transactional(readOnly = true)
@@ -59,7 +98,7 @@ public class PetService {
             Pageable pageable
     ) {
         log.debug("Searching pets species={}, breed={}, minPrice={}, maxPrice={}, availabilityStatus={}, page={}, size={}",
-            species, breed, minPrice, maxPrice, availabilityStatus, pageable.getPageNumber(), pageable.getPageSize());
+                species, breed, minPrice, maxPrice, availabilityStatus, pageable.getPageNumber(), pageable.getPageSize());
         Specification<Pet> specification = (root, query, criteriaBuilder) -> {
             var predicates = new ArrayList<Predicate>();
             if (species != null) {

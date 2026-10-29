@@ -11,4 +11,9 @@ public class KafkaConfig {
     NewTopic petCatalogEventsTopic() {
         return new NewTopic("pet-catalog-events", 1, (short) 1);
     }
+
+    @Bean
+    NewTopic inventoryStatusEventsTopic() {
+        return new NewTopic("inventory-status-events", 1, (short) 1);
+    }
 }

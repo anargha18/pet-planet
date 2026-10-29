@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -24,6 +25,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -56,6 +59,11 @@ public class PaymentService {
         this.simulationResult = environment.getProperty("payment.simulation-result", "SUCCESS").trim().toUpperCase();
     }
 
+    @Transactional(readOnly = true)
+    public Optional<Payment> getPaymentByOrderId(Long orderId) {
+        return paymentRepository.findByOrderId(orderId);
+    }
+
     @Transactional
     public Payment handlePetReservedEvent(PetReservedEvent event) {
         if (event == null) {
@@ -80,7 +88,9 @@ public class PaymentService {
             return existing;
         }
 
-        BigDecimal amount = BigDecimal.valueOf(1000.00);
+        BigDecimal amount = (event.totalAmount() != null && event.totalAmount().compareTo(BigDecimal.ZERO) > 0)
+                ? event.totalAmount()
+                : BigDecimal.valueOf(1000.00);
         String currency = "USD";
         String transactionReference = "txn-" + UUID.randomUUID();
         Payment payment = new Payment(event.orderId(), amount, currency, PaymentStatus.PROCESSING, transactionReference);
@@ -102,7 +112,7 @@ public class PaymentService {
                     payment.getPaymentId(),
                     payment.getAmount()
             );
-            log.info("Payment succeeded for order {} with payment {}", event.orderId(), payment.getPaymentId());
+            log.info("Payment succeeded for order {} with payment {} amount {}", event.orderId(), payment.getPaymentId(), payment.getAmount());
             publishAfterCommit(PAYMENT_SUCCEEDED_TOPIC, event.orderId().toString(), successEvent, payment.getPaymentId(), event.orderId());
             return payment;
         }
@@ -128,7 +138,7 @@ public class PaymentService {
     }
 
     private void publishAfterCommit(String topic, String key, Object event, UUID paymentId, Long orderId) {
-        paymentOutboxRepository.save(new PaymentOutboxEvent(
+        PaymentOutboxEvent outbox = new PaymentOutboxEvent(
                 UUID.randomUUID(),
                 topic,
                 event.getClass().getSimpleName(),
@@ -136,15 +146,51 @@ public class PaymentService {
                 paymentId,
                 serializePayload(event),
                 Instant.now()
-        ));
+        );
+        paymentOutboxRepository.save(outbox);
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    kafkaTemplate.send(topic, key, event);
+                    sendAndMarkPublished(outbox, key, event);
                 }
             });
+            return;
+        }
+        sendAndMarkPublished(outbox, key, event);
+    }
+
+    private void sendAndMarkPublished(PaymentOutboxEvent outbox, String key, Object event) {
+        try {
+            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
+            if (future != null) {
+                future.whenComplete((result, ex) -> {
+                    if (ex == null) {
+                        outbox.setPublishedAt(Instant.now());
+                        paymentOutboxRepository.save(outbox);
+                    }
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("Deferred payment outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${payment.outbox-poll-delay-ms:5000}")
+    @Transactional
+    public void relayOutboxEvents() {
+        List<PaymentOutboxEvent> pending = paymentOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
+        for (PaymentOutboxEvent outbox : pending) {
+            try {
+                Object payloadObj = objectMapper.readTree(outbox.getPayload());
+                String key = outbox.getOrderId() != null ? outbox.getOrderId().toString() : outbox.getEventId().toString();
+                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
+                outbox.setPublishedAt(Instant.now());
+                paymentOutboxRepository.save(outbox);
+            } catch (Exception ex) {
+                log.warn("Failed to relay payment outbox event {}: {}", outbox.getEventId(), ex.getMessage());
+            }
         }
     }
 

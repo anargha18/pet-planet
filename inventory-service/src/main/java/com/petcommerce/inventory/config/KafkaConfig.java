@@ -18,7 +18,37 @@ public class KafkaConfig {
     }
 
     @Bean
+    NewTopic orderCancelledEventsTopic() {
+        return new NewTopic("order-cancelled-events", 1, (short) 1);
+    }
+
+    @Bean
+    NewTopic paymentFailedEventsTopic() {
+        return new NewTopic("payment-failed-events", 1, (short) 1);
+    }
+
+    @Bean
     NewTopic petReservedEventsTopic() {
         return new NewTopic("pet-reserved-events", 1, (short) 1);
+    }
+
+    @Bean
+    NewTopic petReservationFailedEventsTopic() {
+        return new NewTopic("pet-reservation-failed-events", 1, (short) 1);
+    }
+
+    @Bean
+    NewTopic petReservationReleasedEventsTopic() {
+        return new NewTopic("pet-reservation-released-events", 1, (short) 1);
+    }
+
+    @Bean
+    NewTopic petReservationExpiredEventsTopic() {
+        return new NewTopic("pet-reservation-expired-events", 1, (short) 1);
+    }
+
+    @Bean
+    NewTopic inventoryStatusEventsTopic() {
+        return new NewTopic("inventory-status-events", 1, (short) 1);
     }
 }

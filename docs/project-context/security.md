@@ -1,40 +1,14 @@
 # Security
 
-## Spring Security and authorization
+## RS256 Asymmetric JWT Authentication & Authorization
 
-Only user-service has a Spring Security configuration. It enables method security, uses a stateless session policy, disables CSRF, configures CORS, and installs a JWT filter before the username/password filter.
+- **`user-service` (`:8088`)**: Authenticates users with BCrypt and signs JWTs using **RS256** (`PKCS#8` RSA private key from `JWT_PRIVATE_KEY`) with `iss=pet-planet`, `aud=pet-planet`, `sub=email`, and `role=ROLE_CUSTOMER` or `ROLE_ADMIN`.
+- **`pet-catalog-service` (`:8080`)**: Verifies JWTs using the X.509 RSA public key (`JWT_PUBLIC_KEY`). `GET /api/v1/pets/**` is public; `POST`, `PUT`, and `DELETE` require `ROLE_ADMIN`.
+- **`order-service` (`:8081`)**: Verifies JWTs using `JWT_PUBLIC_KEY`. All `/api/v1/orders/**` routes require `ROLE_CUSTOMER` or `ROLE_ADMIN`. Customers can only view or cancel their own orders (enforced via deterministic SHA-256 `customerId` derivation from the authenticated principal), while `ADMIN` can inspect any order.
+- **`inventory-service` (`:8082`)**: Verifies JWTs using `JWT_PUBLIC_KEY`. Direct REST calls to `/api/v1/inventory/**` require `ROLE_ADMIN`.
 
-- Public paths: `/api/v1/auth/**`, `/swagger-ui.html`, `/swagger-ui/**`, `/api-docs/**`, `/actuator/health`, `/error`.
-- Other user-service requests require authentication.
-- `GET /api/v1/users/me` requires authenticated principal.
-- `GET /api/v1/users/{id}` requires `ROLE_ADMIN`.
-- Registration assigns `CUSTOMER`; no public role assignment was found.
-- Roles present in entity enum: `CUSTOMER`, `ADMIN`.
+## CORS Architecture
 
-The other eight services do not show Spring Security/JWT validation configuration. Their endpoints should not be assumed protected because a token is issued by user-service.
-
-## Authentication and credentials
-
-User-service uses BCrypt password hashing. Login/register return a signed bearer JWT. JWT contains email subject and role claim and is configured with expiration. The HMAC signing key is read from `JWT_SECRET`; expiry is read from `JWT_EXPIRATION_MS`. The request filter checks validity and loads user details from the database.
-
-The React app stores the token/auth object in local storage and sends it as a bearer token to user-service profile calls (and generically exposes helper headers). It does not guard routes by role.
-
-## CORS and CSRF
-
-User-service allows one configured origin, with default origin configured for local frontend. Allowed methods are GET, POST, PUT, PATCH, DELETE, OPTIONS; allowed headers are `Authorization` and `Content-Type`. CSRF is disabled in this stateless bearer-token setup. No corresponding CORS or CSRF configuration was found in other services.
-
-## Secret handling
-
-Use environment variables for DB credentials and JWT key; this document lists variable names only. `.env.example` and application configs include development/example fallback values; do not treat them as production-safe. `.env` is ignored by Git and should remain local. No production secret manager, TLS termination, or key rotation setup was found.
-
-## Observable gaps (not a penetration test)
-
-- Business services do not validate tokens or enforce roles; catalog mutation endpoints have no visible authorization rules.
-- Order API accepts client-supplied numeric `customerId` without tying it to authenticated identity.
-- User-service uses UUID IDs while order API expects numeric IDs; the frontend's conversion does not establish a safe identity mapping.
-- Local Kafka listeners use plaintext and local broker has a single replica.
-- No TLS/production secret-management/deployment controls were found.
-- Payment is simulated, not a real payment integration.
-
-These are source-visible configuration gaps, not claims that a live deployed system is exploitable. Runtime/deployment topology was not verified. See [implementation status](./implementation-status.md).
-
+- **Edge Gateway CORS (`gateway-service`, `:8089`)**: Serves as the single CORS entry point for frontend traffic (`allowedOriginPatterns: http://localhost:*, http://127.0.0.1:*`), supporting credentialed requests and handling preflight `OPTIONS` requests via `add-to-simple-url-handler-mapping: true`.
+- **Response Header De-duplication**: Programmatic routes in `GatewayConfig` and global configuration apply `DedupeResponseHeader` (`RETAIN_UNIQUE`) to ensure exactly one clean `Access-Control-Allow-Origin` and `Access-Control-Allow-Credentials` header is delivered to the browser.
+- **Downstream Services**: Delegate CORS handling to `gateway-service` to prevent duplicate cross-origin response headers.
