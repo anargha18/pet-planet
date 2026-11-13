@@ -6,6 +6,7 @@ import com.petcommerce.catalog.domain.model.AvailabilityStatus;
 import com.petcommerce.catalog.domain.model.Gender;
 import com.petcommerce.catalog.domain.model.Pet;
 import com.petcommerce.catalog.domain.model.Species;
+import com.petcommerce.catalog.messaging.publisher.PetCatalogEventPublisher;
 import com.petcommerce.catalog.persistence.repository.PetRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +27,9 @@ class PetServiceTest {
 
     @Mock
     private PetRepository petRepository;
+
+    @Mock
+    private PetCatalogEventPublisher petCatalogEventPublisher;
 
     @InjectMocks
     private PetService petService;

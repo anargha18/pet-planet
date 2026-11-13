@@ -3,26 +3,23 @@ package com.petcommerce.catalog.application;
 import com.petcommerce.catalog.api.dto.CreatePetRequest;
 import com.petcommerce.catalog.api.dto.PetResponse;
 import com.petcommerce.catalog.api.dto.UpdatePetRequest;
+import com.petcommerce.catalog.api.mapper.PetMapper;
+import com.petcommerce.catalog.domain.exception.PetNotFoundException;
 import com.petcommerce.catalog.domain.model.AvailabilityStatus;
 import com.petcommerce.catalog.domain.model.Pet;
 import com.petcommerce.catalog.domain.model.Species;
-import com.petcommerce.catalog.messaging.event.PetCatalogEvent;
-import com.petcommerce.catalog.domain.exception.PetNotFoundException;
+import com.petcommerce.catalog.messaging.publisher.PetCatalogEventPublisher;
 import com.petcommerce.catalog.persistence.repository.PetRepository;
-import jakarta.persistence.criteria.Predicate;
+import com.petcommerce.catalog.persistence.repository.PetSpecifications;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.UUID;
 
 @Service
@@ -31,15 +28,11 @@ public class PetService {
     private static final Logger log = LoggerFactory.getLogger(PetService.class);
 
     private final PetRepository petRepository;
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    private final PetCatalogEventPublisher petCatalogEventPublisher;
 
-    public PetService(PetRepository petRepository) {
+    public PetService(PetRepository petRepository, PetCatalogEventPublisher petCatalogEventPublisher) {
         this.petRepository = petRepository;
-    }
-
-    @Autowired(required = false)
-    public void setKafkaTemplate(KafkaTemplate<String, Object> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
+        this.petCatalogEventPublisher = petCatalogEventPublisher;
     }
 
     @Transactional
@@ -50,17 +43,8 @@ public class PetService {
         Pet savedPet = petRepository.save(pet);
         log.info("Created pet id={}, species={}, availabilityStatus={}",
                 savedPet.getId(), savedPet.getSpecies(), savedPet.getAvailabilityStatus());
-        if (kafkaTemplate != null && savedPet.getId() != null) {
-            kafkaTemplate.send("pet-catalog-events", savedPet.getId().toString(), new PetCatalogEvent(
-                    UUID.randomUUID(),
-                    "PetCreatedEvent",
-                    1,
-                    savedPet.getId(),
-                    savedPet.getAvailabilityStatus().name(),
-                    Instant.now()
-            ));
-        }
-        return toResponse(savedPet);
+        petCatalogEventPublisher.publishPetCreated(savedPet);
+        return PetMapper.toResponse(savedPet);
     }
 
     @Transactional
@@ -85,7 +69,7 @@ public class PetService {
     @Transactional(readOnly = true)
     public PetResponse getById(UUID petId) {
         log.debug("Fetching pet id={}", petId);
-        return toResponse(findPet(petId));
+        return PetMapper.toResponse(findPet(petId));
     }
 
     @Transactional(readOnly = true)
@@ -99,28 +83,9 @@ public class PetService {
     ) {
         log.debug("Searching pets species={}, breed={}, minPrice={}, maxPrice={}, availabilityStatus={}, page={}, size={}",
                 species, breed, minPrice, maxPrice, availabilityStatus, pageable.getPageNumber(), pageable.getPageSize());
-        Specification<Pet> specification = (root, query, criteriaBuilder) -> {
-            var predicates = new ArrayList<Predicate>();
-            if (species != null) {
-                predicates.add(criteriaBuilder.equal(root.get("species"), species));
-            }
-            if (breed != null && !breed.isBlank()) {
-                predicates.add(criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("breed")), "%" + breed.toLowerCase() + "%"));
-            }
-            if (minPrice != null) {
-                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("price"), minPrice));
-            }
-            if (maxPrice != null) {
-                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("price"), maxPrice));
-            }
-            if (availabilityStatus != null) {
-                predicates.add(criteriaBuilder.equal(root.get("availabilityStatus"), availabilityStatus));
-            }
-            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
-        };
+        Specification<Pet> specification = PetSpecifications.search(species, breed, minPrice, maxPrice, availabilityStatus);
 
-        Page<PetResponse> results = petRepository.findAll(specification, pageable).map(this::toResponse);
+        Page<PetResponse> results = petRepository.findAll(specification, pageable).map(PetMapper::toResponse);
         log.debug("Pet search returned {} results out of {}", results.getNumberOfElements(), results.getTotalElements());
         return results;
     }
@@ -132,7 +97,7 @@ public class PetService {
         pet.setAvailabilityStatus(request.availabilityStatus());
         Pet updatedPet = petRepository.save(pet);
         log.info("Updated pet id={}, availabilityStatus={}", petId, updatedPet.getAvailabilityStatus());
-        return toResponse(updatedPet);
+        return PetMapper.toResponse(updatedPet);
     }
 
     @Transactional
@@ -167,12 +132,5 @@ public class PetService {
         pet.setGender(request.gender());
         pet.setPrice(request.price());
         pet.setDescription(request.description());
-    }
-
-    private PetResponse toResponse(Pet pet) {
-        return new PetResponse(
-                pet.getId(), pet.getName(), pet.getSpecies(), pet.getBreed(), pet.getAge(),
-                pet.getGender(), pet.getPrice(), pet.getDescription(), pet.getAvailabilityStatus(),
-                pet.getCreatedAt(), pet.getUpdatedAt());
     }
 }
