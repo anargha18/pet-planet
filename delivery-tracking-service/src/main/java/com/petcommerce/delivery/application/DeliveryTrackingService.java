@@ -1,25 +1,18 @@
 package com.petcommerce.delivery.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.delivery.persistence.entity.DeliveryOutboxEvent;
 import com.petcommerce.delivery.domain.model.DeliveryRecord;
 import com.petcommerce.delivery.domain.model.DeliveryStatus;
-import com.petcommerce.delivery.persistence.entity.ProcessedEvent;
 import com.petcommerce.delivery.messaging.event.DeliveryStatusUpdatedEvent;
 import com.petcommerce.delivery.messaging.event.ShipmentCreatedEvent;
-import com.petcommerce.delivery.persistence.repository.DeliveryOutboxRepository;
+import com.petcommerce.delivery.messaging.publisher.DeliveryEventPublisher;
+import com.petcommerce.delivery.persistence.entity.ProcessedEvent;
 import com.petcommerce.delivery.persistence.repository.DeliveryRecordRepository;
 import com.petcommerce.delivery.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,22 +27,15 @@ public class DeliveryTrackingService {
 
     private final DeliveryRecordRepository deliveryRecordRepository;
     private final ProcessedEventRepository processedEventRepository;
-    private final DeliveryOutboxRepository deliveryOutboxRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final DeliveryEventPublisher eventPublisher;
 
     public DeliveryTrackingService(
             DeliveryRecordRepository deliveryRecordRepository,
             ProcessedEventRepository processedEventRepository,
-            DeliveryOutboxRepository deliveryOutboxRepository,
-            KafkaTemplate<String, Object> kafkaTemplate,
-            ObjectMapper objectMapper) {
+            DeliveryEventPublisher eventPublisher) {
         this.deliveryRecordRepository = deliveryRecordRepository;
         this.processedEventRepository = processedEventRepository;
-        this.deliveryOutboxRepository = deliveryOutboxRepository;
-        this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
-        this.objectMapper.findAndRegisterModules();
+        this.eventPublisher = eventPublisher;
     }
 
     public Optional<DeliveryRecord> getDeliveryByOrderId(Long orderId) {
@@ -102,7 +88,7 @@ public class DeliveryTrackingService {
                 delivery.getStatus().name()
         );
 
-        publishAfterCommit(DELIVERY_STATUS_UPDATED_TOPIC, event.orderId().toString(), statusEvent, delivery.getId(), event.orderId(), event.correlationId());
+        eventPublisher.publish(DELIVERY_STATUS_UPDATED_TOPIC, event.orderId().toString(), statusEvent, delivery.getId(), event.orderId(), event.correlationId());
 
         log.info("Delivery tracking created for order {} (customer {}) with tracking {}", event.orderId(), customerId, delivery.getTrackingNumber());
         return delivery;
@@ -130,72 +116,8 @@ public class DeliveryTrackingService {
                 delivery.getStatus().name()
         );
 
-        publishAfterCommit(DELIVERY_STATUS_UPDATED_TOPIC, orderId.toString(), statusEvent, delivery.getId(), orderId, statusEvent.correlationId());
+        eventPublisher.publish(DELIVERY_STATUS_UPDATED_TOPIC, orderId.toString(), statusEvent, delivery.getId(), orderId, statusEvent.correlationId());
         return delivery;
     }
 
-    private void publishAfterCommit(String topic, String key, Object event, UUID deliveryId, Long orderId, UUID correlationId) {
-        DeliveryOutboxEvent outbox = new DeliveryOutboxEvent(
-                UUID.randomUUID(),
-                topic,
-                event.getClass().getSimpleName(),
-                orderId,
-                correlationId,
-                serializePayload(event),
-                Instant.now()
-        );
-        deliveryOutboxRepository.save(outbox);
-
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    sendAndMarkPublished(outbox, key, event);
-                }
-            });
-            return;
-        }
-        sendAndMarkPublished(outbox, key, event);
-    }
-
-    private void sendAndMarkPublished(DeliveryOutboxEvent outbox, String key, Object event) {
-        try {
-            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
-            if (future != null) {
-                future.whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        outbox.setPublishedAt(Instant.now());
-                        deliveryOutboxRepository.save(outbox);
-                    }
-                });
-            }
-        } catch (Exception ex) {
-            log.warn("Deferred delivery outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
-        }
-    }
-
-    @Scheduled(fixedDelayString = "${delivery.outbox-poll-delay-ms:5000}")
-    @Transactional
-    public void relayOutboxEvents() {
-        List<DeliveryOutboxEvent> pending = deliveryOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
-        for (DeliveryOutboxEvent outbox : pending) {
-            try {
-                Object payloadObj = objectMapper.readTree(outbox.getPayload());
-                String key = outbox.getOrderId() != null ? outbox.getOrderId().toString() : outbox.getEventId().toString();
-                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
-                outbox.setPublishedAt(Instant.now());
-                deliveryOutboxRepository.save(outbox);
-            } catch (Exception ex) {
-                log.warn("Failed to relay delivery outbox event {}: {}", outbox.getEventId(), ex.getMessage());
-            }
-        }
-    }
-
-    private String serializePayload(Object event) {
-        try {
-            return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Unable to serialize delivery event", ex);
-        }
-    }
 }
