@@ -11,7 +11,8 @@ import com.petcommerce.order.domain.exception.InvalidOrderStateException;
 import com.petcommerce.order.domain.exception.OrderNotFoundException;
 import com.petcommerce.order.domain.exception.PetCatalogUnavailableException;
 import com.petcommerce.order.security.JwtService;
-import com.petcommerce.order.application.OrderService;
+import com.petcommerce.order.application.OrderCommandService;
+import com.petcommerce.order.application.OrderQueryService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,7 +48,10 @@ class OrderControllerTest {
     private ObjectMapper objectMapper;
 
     @MockBean
-    private OrderService orderService;
+    private OrderCommandService orderCommandService;
+
+    @MockBean
+    private OrderQueryService orderQueryService;
 
     @MockBean
     private PetCatalogClient petCatalogClient;
@@ -68,7 +72,7 @@ class OrderControllerTest {
                 java.time.Instant.now()
         );
 
-        Mockito.when(orderService.create(any(CreateOrderRequest.class), any())).thenReturn(orderResponse);
+        Mockito.when(orderCommandService.create(any(CreateOrderRequest.class), any())).thenReturn(orderResponse);
 
         String body = "{\"items\":[{\"petId\":\"" + petId + "\",\"quantity\":1}]}";
 
@@ -91,7 +95,7 @@ class OrderControllerTest {
                 java.time.Instant.now()
         );
 
-        Mockito.when(orderService.getOrder(eq(1L), any())).thenReturn(orderResponse);
+        Mockito.when(orderQueryService.getOrder(eq(1L), any())).thenReturn(orderResponse);
 
         mockMvc.perform(get("/api/v1/orders/1")
                         .with(user("7").roles("USER")))
@@ -112,7 +116,7 @@ class OrderControllerTest {
 
     @Test
     void notFoundReturns404() throws Exception {
-        Mockito.when(orderService.getOrder(eq(999L), any())).thenThrow(new OrderNotFoundException(999L));
+        Mockito.when(orderQueryService.getOrder(eq(999L), any())).thenThrow(new OrderNotFoundException(999L));
 
         mockMvc.perform(get("/api/v1/orders/999")
                         .with(user("7").roles("USER")))
@@ -121,7 +125,7 @@ class OrderControllerTest {
 
     @Test
     void cancelConflictReturns409() throws Exception {
-        Mockito.when(orderService.cancel(eq(1L), any())).thenThrow(new InvalidOrderStateException(1L, "PAID"));
+        Mockito.when(orderCommandService.cancel(eq(1L), any())).thenThrow(new InvalidOrderStateException(1L, "PAID"));
 
         mockMvc.perform(patch("/api/v1/orders/1/cancel")
                         .with(user("7").roles("USER")))
@@ -130,7 +134,7 @@ class OrderControllerTest {
 
     @Test
     void petCatalogUnavailableReturns503() throws Exception {
-        Mockito.when(orderService.create(any(CreateOrderRequest.class), any()))
+        Mockito.when(orderCommandService.create(any(CreateOrderRequest.class), any()))
                 .thenThrow(new PetCatalogUnavailableException("Pet Catalog service is unavailable"));
 
         String body = "{\"items\":[{\"petId\":\"" + UUID.randomUUID() + "\",\"quantity\":1}]}";
