@@ -3,7 +3,8 @@ package com.petcommerce.order.api.controller;
 import com.petcommerce.order.api.dto.CreateOrderRequest;
 import com.petcommerce.order.api.dto.OrderResponse;
 import com.petcommerce.order.domain.model.OrderStatus;
-import com.petcommerce.order.application.OrderService;
+import com.petcommerce.order.application.OrderCommandService;
+import com.petcommerce.order.application.OrderQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -25,10 +26,12 @@ import java.util.Set;
 @Tag(name = "Orders", description = "Order operations")
 public class OrderController {
 
-    private final OrderService orderService;
+    private final OrderCommandService orderCommandService;
+    private final OrderQueryService orderQueryService;
 
-    public OrderController(OrderService orderService) {
-        this.orderService = orderService;
+    public OrderController(OrderCommandService orderCommandService, OrderQueryService orderQueryService) {
+        this.orderCommandService = orderCommandService;
+        this.orderQueryService = orderQueryService;
     }
 
     @PostMapping("/orders")
@@ -42,13 +45,13 @@ public class OrderController {
             @ApiResponse(responseCode = "503", description = "Pet Catalog unavailable")
     })
     public OrderResponse createOrder(Authentication authentication, @Valid @RequestBody CreateOrderRequest request) {
-        return orderService.create(request, authentication);
+        return orderCommandService.create(request, authentication);
     }
 
     @GetMapping("/orders/{orderId}")
     @Operation(summary = "Get order by ID")
     public OrderResponse getOrder(Authentication authentication, @PathVariable Long orderId) {
-        return orderService.getOrder(orderId, authentication);
+        return orderQueryService.getOrder(orderId, authentication);
     }
 
     @GetMapping("/orders")
@@ -60,7 +63,7 @@ public class OrderController {
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         validateSort(pageable);
-        return orderService.getOrders(customerId, status, authentication, pageable);
+        return orderQueryService.getOrders(customerId, status, authentication, pageable);
     }
 
     private void validateSort(Pageable pageable) {
@@ -75,6 +78,6 @@ public class OrderController {
     @PatchMapping("/orders/{orderId}/cancel")
     @Operation(summary = "Cancel an order")
     public OrderResponse cancelOrder(Authentication authentication, @PathVariable Long orderId) {
-        return orderService.cancel(orderId, authentication);
+        return orderCommandService.cancel(orderId, authentication);
     }
 }
