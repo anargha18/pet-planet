@@ -1,14 +1,15 @@
 package com.petcommerce.inventory.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.petcommerce.inventory.application.InventoryService;
 import com.petcommerce.inventory.domain.model.InventoryStatus;
 import com.petcommerce.inventory.domain.model.PetInventory;
 import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
+import com.petcommerce.inventory.messaging.publisher.InventoryEventPublisher;
 import com.petcommerce.inventory.persistence.repository.InventoryOutboxRepository;
 import com.petcommerce.inventory.persistence.repository.PetInventoryRepository;
 import com.petcommerce.inventory.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.inventory.application.InventoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,9 +54,7 @@ class InventoryServiceTest {
         inventoryService = new InventoryService(
                 petInventoryRepository,
                 processedEventRepository,
-                inventoryOutboxRepository,
-                kafkaTemplate,
-                new ObjectMapper().findAndRegisterModules(),
+                new InventoryEventPublisher(inventoryOutboxRepository, kafkaTemplate, new ObjectMapper().findAndRegisterModules()),
                 environment
         );
     }

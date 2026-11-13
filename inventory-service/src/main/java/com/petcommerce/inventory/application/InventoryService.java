@@ -1,11 +1,7 @@
 package com.petcommerce.inventory.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.inventory.persistence.entity.InventoryOutboxEvent;
 import com.petcommerce.inventory.domain.model.InventoryStatus;
 import com.petcommerce.inventory.domain.model.PetInventory;
-import com.petcommerce.inventory.persistence.entity.ProcessedEvent;
 import com.petcommerce.inventory.messaging.event.InventoryStatusChangedEvent;
 import com.petcommerce.inventory.messaging.event.OrderCancelledEvent;
 import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
@@ -16,19 +12,17 @@ import com.petcommerce.inventory.messaging.event.PetReservationExpiredEvent;
 import com.petcommerce.inventory.messaging.event.PetReservationFailedEvent;
 import com.petcommerce.inventory.messaging.event.PetReservationReleasedEvent;
 import com.petcommerce.inventory.messaging.event.PetReservedEvent;
-import com.petcommerce.inventory.persistence.repository.InventoryOutboxRepository;
+import com.petcommerce.inventory.messaging.publisher.InventoryEventPublisher;
+import com.petcommerce.inventory.persistence.entity.ProcessedEvent;
 import com.petcommerce.inventory.persistence.repository.PetInventoryRepository;
 import com.petcommerce.inventory.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -48,24 +42,17 @@ public class InventoryService {
 
     private final PetInventoryRepository petInventoryRepository;
     private final ProcessedEventRepository processedEventRepository;
-    private final InventoryOutboxRepository inventoryOutboxRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final InventoryEventPublisher eventPublisher;
     private final Duration reservationTimeout;
 
     public InventoryService(
             PetInventoryRepository petInventoryRepository,
             ProcessedEventRepository processedEventRepository,
-            InventoryOutboxRepository inventoryOutboxRepository,
-            KafkaTemplate<String, Object> kafkaTemplate,
-            ObjectMapper objectMapper,
+            InventoryEventPublisher eventPublisher,
             org.springframework.core.env.Environment environment) {
         this.petInventoryRepository = petInventoryRepository;
         this.processedEventRepository = processedEventRepository;
-        this.inventoryOutboxRepository = inventoryOutboxRepository;
-        this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
-        this.objectMapper.findAndRegisterModules();
+        this.eventPublisher = eventPublisher;
         this.reservationTimeout = Duration.ofMinutes(Integer.parseInt(environment.getProperty("inventory.reservation-expiration-minutes", "5")));
     }
 
@@ -99,7 +86,7 @@ public class InventoryService {
                     default -> "PET_NOT_FOUND";
                 };
                 log.warn("Pet {} is unavailable for order {}. Reason: {}", petId, event.orderId(), reason);
-                publishAfterCommit(
+                eventPublisher.publish(
                         PET_RESERVATION_FAILED_TOPIC,
                         petId.toString(),
                         new PetReservationFailedEvent(UUID.randomUUID(), "PetReservationFailedEvent", 1, event.aggregateId(), Instant.now(), event.correlationId(), event.orderId(), petId, reason),
@@ -128,7 +115,7 @@ public class InventoryService {
         }
 
         UUID primaryPetId = event.petIds().get(0);
-        publishAfterCommit(
+        eventPublisher.publish(
                 PET_RESERVED_TOPIC,
                 primaryPetId.toString(),
                 new PetReservedEvent(UUID.randomUUID(), "PetReservedEvent", 1, event.aggregateId(), now, event.correlationId(), event.orderId(), orderReservationId, primaryPetId, event.totalAmount()),
@@ -233,7 +220,7 @@ public class InventoryService {
                 inventory.setReservedAt(null);
                 inventory.setReservationExpiresAt(null);
                 petInventoryRepository.save(inventory);
-                publishAfterCommit(
+                eventPublisher.publish(
                         PET_RESERVATION_RELEASED_TOPIC,
                         inventory.getPetId().toString(),
                         new PetReservationReleasedEvent(UUID.randomUUID(), "PetReservationReleasedEvent", 1, inventory.getPetId(), Instant.now(), correlationId, orderId, reservationId, inventory.getPetId()),
@@ -277,7 +264,7 @@ public class InventoryService {
         inventory.setReservedAt(null);
         inventory.setReservationExpiresAt(null);
         PetInventory saved = petInventoryRepository.save(inventory);
-        publishAfterCommit(
+        eventPublisher.publish(
                 PET_RESERVATION_RELEASED_TOPIC,
                 petId.toString(),
                 new PetReservationReleasedEvent(UUID.randomUUID(), "PetReservationReleasedEvent", 1, petId, Instant.now(), UUID.randomUUID(), orderId, reservationId, petId),
@@ -320,7 +307,7 @@ public class InventoryService {
             inventory.setReservedAt(null);
             inventory.setReservationExpiresAt(null);
             petInventoryRepository.save(inventory);
-            publishAfterCommit(
+            eventPublisher.publish(
                     PET_RESERVATION_EXPIRED_TOPIC,
                     inventory.getPetId().toString(),
                     new PetReservationExpiredEvent(UUID.randomUUID(), "PetReservationExpiredEvent", 1, inventory.getPetId(), Instant.now(), UUID.randomUUID(), expiredOrderId, inventory.getPetId()),
@@ -358,7 +345,7 @@ public class InventoryService {
                 orderId,
                 Instant.now()
         );
-        publishAfterCommit(
+        eventPublisher.publish(
                 INVENTORY_STATUS_TOPIC,
                 petId.toString(),
                 statusEvent,
@@ -369,69 +356,4 @@ public class InventoryService {
         );
     }
 
-    private void publishAfterCommit(String topic, String key, Object event, String eventType, UUID petId, Long orderId, UUID correlationId) {
-        InventoryOutboxEvent outbox = new InventoryOutboxEvent(
-                UUID.randomUUID(),
-                topic,
-                eventType,
-                petId,
-                orderId,
-                correlationId,
-                serializePayload(event),
-                Instant.now()
-        );
-        inventoryOutboxRepository.save(outbox);
-
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    sendAndMarkPublished(outbox, key, event);
-                }
-            });
-            return;
-        }
-        sendAndMarkPublished(outbox, key, event);
-    }
-
-    private void sendAndMarkPublished(InventoryOutboxEvent outbox, String key, Object event) {
-        try {
-            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
-            if (future != null) {
-                future.whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        outbox.setPublishedAt(Instant.now());
-                        inventoryOutboxRepository.save(outbox);
-                    }
-                });
-            }
-        } catch (Exception ex) {
-            log.warn("Deferred inventory outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
-        }
-    }
-
-    @Scheduled(fixedDelayString = "${inventory.outbox-poll-delay-ms:5000}")
-    @Transactional
-    public void relayOutboxEvents() {
-        List<InventoryOutboxEvent> pending = inventoryOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
-        for (InventoryOutboxEvent outbox : pending) {
-            try {
-                Object payloadObj = objectMapper.readTree(outbox.getPayload());
-                String key = outbox.getPetId() != null ? outbox.getPetId().toString() : outbox.getEventId().toString();
-                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
-                outbox.setPublishedAt(Instant.now());
-                inventoryOutboxRepository.save(outbox);
-            } catch (Exception ex) {
-                log.warn("Failed to relay inventory outbox event {}: {}", outbox.getEventId(), ex.getMessage());
-            }
-        }
-    }
-
-    private String serializePayload(Object event) {
-        try {
-            return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Unable to serialize inventory event", e);
-        }
-    }
 }
