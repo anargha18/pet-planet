@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Root aggregator: builds and tests every service with one command (./mvnw verify).
+      Services keep their own spring-boot-starter-parent for now; a shared parent for
+      dependency versions is introduced together with platform-commons (Phase 1).
+    -->
+    <groupId>com.petcommerce</groupId>
+    <artifactId>pet-planet</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>pet-planet</name>
+
+    <modules>
+        <module>gateway-service</module>
+        <module>user-service</module>
+        <module>pet-catalog-service</module>
+        <module>order-service</module>
+        <module>inventory-service</module>
+        <module>payment-service</module>
+        <module>notification-service</module>
+        <module>shipping-service</module>
+        <module>delivery-tracking-service</module>
+        <module>fulfillment-service</module>
+    </modules>
+</project>
