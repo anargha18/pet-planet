@@ -1,4 +1,4 @@
-package com.petcommerce.shipping.entity;
+package com.petcommerce.shipping.domain.model;
 
 public enum ShipmentStatus {
     PENDING,

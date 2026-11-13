@@ -1,9 +1,11 @@
-package com.petcommerce.shipping.event;
+package com.petcommerce.shipping.messaging.event;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
-public record ShipmentCreatedEvent(
+public record OrderConfirmedEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
@@ -12,11 +14,10 @@ public record ShipmentCreatedEvent(
         UUID correlationId,
         Long orderId,
         Long customerId,
-        UUID shipmentId,
-        String trackingNumber,
-        String status
+        List<UUID> petIds,
+        BigDecimal totalAmount
 ) {
-    public ShipmentCreatedEvent(
+    public OrderConfirmedEvent(
             UUID eventId,
             String eventType,
             Integer eventVersion,
@@ -24,10 +25,9 @@ public record ShipmentCreatedEvent(
             Instant timestamp,
             UUID correlationId,
             Long orderId,
-            UUID shipmentId,
-            String trackingNumber,
-            String status
+            List<UUID> petIds,
+            BigDecimal totalAmount
     ) {
-        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, 101L, shipmentId, trackingNumber, status);
+        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, 101L, petIds, totalAmount);
     }
 }

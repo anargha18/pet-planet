@@ -1,7 +1,7 @@
-package com.petcommerce.shipping.controller;
+package com.petcommerce.shipping.api.controller;
 
-import com.petcommerce.shipping.entity.Shipment;
-import com.petcommerce.shipping.service.ShippingService;
+import com.petcommerce.shipping.domain.model.Shipment;
+import com.petcommerce.shipping.application.ShippingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
