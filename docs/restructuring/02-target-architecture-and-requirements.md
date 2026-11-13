@@ -366,6 +366,20 @@ Each phase ends with a working, runnable system and its own commit/PR. Phases 0�
 | **5. Frontend alignment** | UI covers every backend capability | R-STR-05 (pure move first), then R-FE-01…06 | Every customer and admin capability is reachable from the UI; expired tokens handled. |
 | **6. Verify and document** | Proof and accurate docs | R-TEST-04, R-TEST-05, R-DOC-01…04 | `./mvnw verify` green, `make smoke` green, docs match code. |
 
+### Progress log
+
+**Phase 0a: done (2026-11-14).** Root aggregator POM and Maven wrapper (R-INF-01, aggregator only). Every service re-packaged (R-STR-02 steps A and B). ArchUnit rules in all services (R-STR-03). Frontend grouped by feature (R-STR-05). Stray root `node_modules/` removed (R-STR-06). Test baseline before and after: same 49 functional tests, all passing, plus 110 architecture checks. Frontend production build passes; only import lines changed in moved files.
+
+Deviations from the plan above, made deliberately:
+- **Application services return response DTOs** (via `api.mapper`, inside the transaction) instead of entities. `Order.items` is lazy and `open-in-view` is off, so mapping outside the transaction would throw. R-STR-03 was adjusted accordingly (see [code-structure.md](../project-context/code-structure.md)).
+- **Technical entities** (outbox, processed events) live in `persistence.entity` until `platform-commons` exists.
+- **Deferred to later phases:**
+  - Shared parent POM and root-context Dockerfiles (R-INF-01 part 2, R-INF-02) → Phase 1, together with `platform-commons`.
+  - `PaymentProcessor` extraction → Phase 2, together with refunds (R-SAGA-04).
+  - Controllers that still return entities (payment, notification, shipping, delivery, fulfillment) → Phase 3 (R-SEC-06).
+  - Splitting `OrderRow` out of `OrdersPage.jsx` → Phase 5.
+- ArchUnit runs as plain JUnit `@Test` methods (core `archunit` artifact). The `archunit-junit5` engine was not discovered by Surefire here (0 tests ran), so it was replaced.
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.

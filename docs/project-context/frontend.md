@@ -4,6 +4,7 @@
 
 - React 18.3.1, React Router 6.28.0, Vite 5.4.10, Material UI 5.16.x, Axios 1.7.x.
 - All API requests target `VITE_API_GATEWAY_URL` (default `http://localhost:8089`).
+- Source is grouped by feature: `app/` (routes and providers), `api/` (backend calls behind `api/index.js`), `features/{auth,catalog,cart,checkout,orders}` (each with a public `index.js`), `components/` (shared `Layout`) and `theme/`. Pages are found under their feature, e.g. `features/orders/OrdersPage.jsx`. Boundary rules are checked by `npm run check:boundaries`; see [Code structure](./code-structure.md#frontend-frontendsrc).
 
 ## Routes and pages
 

@@ -1,6 +1,6 @@
 # Backend services
 
-All ten backend modules use Java 17 and Spring Boot 3.5.5.
+All ten backend modules use Java 17 and Spring Boot 3.5.5. They share one package layout (`api`, `application`, `domain`, `security`, `messaging`, `persistence`, `client`, `config`), described with its enforced rules in [Code structure](../code-structure.md). Build and test everything from the repository root with `./mvnw test`.
 
 | Service | Port | Notes |
 |---|---:|---|
