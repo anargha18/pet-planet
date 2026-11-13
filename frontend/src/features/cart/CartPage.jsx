@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { useCart } from '../context/CartContext';
+import { useCart } from './CartContext';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {

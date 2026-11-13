@@ -14,8 +14,8 @@ import {
 } from '@mui/material';
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
-import { extractApiError, getPetById } from '../services/api';
+import { useCart } from '../cart';
+import { extractApiError, getPetById } from '../../api';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {

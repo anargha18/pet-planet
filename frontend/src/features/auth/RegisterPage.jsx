@@ -13,8 +13,8 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { extractApiError, registerUser } from '../services/api';
+import { useAuth } from './AuthContext';
+import { extractApiError, registerUser } from '../../api';
 
 const initialState = {
   firstName: '',

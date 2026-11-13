@@ -29,7 +29,7 @@ import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined
 import PaymentOutlinedIcon from '@mui/icons-material/PaymentOutlined';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth';
 import {
   cancelOrder,
   extractApiError,
@@ -37,7 +37,7 @@ import {
   getOrders,
   getPaymentByOrderId,
   getShipmentByOrderId,
-} from '../services/api';
+} from '../../api';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {

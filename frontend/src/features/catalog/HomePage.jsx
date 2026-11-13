@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { Link } from 'react-router-dom';
-import { extractApiError, getPets } from '../services/api';
+import { extractApiError, getPets } from '../../api';
 
 const categories = [
   {

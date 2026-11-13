@@ -19,7 +19,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link, useSearchParams } from 'react-router-dom';
-import { extractApiError, getPets } from '../services/api';
+import { extractApiError, getPets } from '../../api';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {
