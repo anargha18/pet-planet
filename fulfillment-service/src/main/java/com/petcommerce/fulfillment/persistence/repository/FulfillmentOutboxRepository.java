@@ -1,6 +1,6 @@
-package com.petcommerce.fulfillment.repository;
+package com.petcommerce.fulfillment.persistence.repository;
 
-import com.petcommerce.fulfillment.entity.FulfillmentOutboxEvent;
+import com.petcommerce.fulfillment.persistence.entity.FulfillmentOutboxEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

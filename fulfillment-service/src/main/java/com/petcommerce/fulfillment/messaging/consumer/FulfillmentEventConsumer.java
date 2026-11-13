@@ -1,7 +1,7 @@
-package com.petcommerce.fulfillment.consumer;
+package com.petcommerce.fulfillment.messaging.consumer;
 
-import com.petcommerce.fulfillment.event.DeliveryStatusUpdatedEvent;
-import com.petcommerce.fulfillment.service.FulfillmentService;
+import com.petcommerce.fulfillment.messaging.event.DeliveryStatusUpdatedEvent;
+import com.petcommerce.fulfillment.application.FulfillmentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;

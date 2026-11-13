@@ -1,16 +1,16 @@
-package com.petcommerce.fulfillment.service;
+package com.petcommerce.fulfillment.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.fulfillment.entity.FulfillmentOutboxEvent;
-import com.petcommerce.fulfillment.entity.FulfillmentRecord;
-import com.petcommerce.fulfillment.entity.FulfillmentStatus;
-import com.petcommerce.fulfillment.entity.ProcessedEvent;
-import com.petcommerce.fulfillment.event.DeliveryStatusUpdatedEvent;
-import com.petcommerce.fulfillment.event.FulfillmentUpdatedEvent;
-import com.petcommerce.fulfillment.repository.FulfillmentOutboxRepository;
-import com.petcommerce.fulfillment.repository.FulfillmentRecordRepository;
-import com.petcommerce.fulfillment.repository.ProcessedEventRepository;
+import com.petcommerce.fulfillment.persistence.entity.FulfillmentOutboxEvent;
+import com.petcommerce.fulfillment.domain.model.FulfillmentRecord;
+import com.petcommerce.fulfillment.domain.model.FulfillmentStatus;
+import com.petcommerce.fulfillment.persistence.entity.ProcessedEvent;
+import com.petcommerce.fulfillment.messaging.event.DeliveryStatusUpdatedEvent;
+import com.petcommerce.fulfillment.messaging.event.FulfillmentUpdatedEvent;
+import com.petcommerce.fulfillment.persistence.repository.FulfillmentOutboxRepository;
+import com.petcommerce.fulfillment.persistence.repository.FulfillmentRecordRepository;
+import com.petcommerce.fulfillment.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;

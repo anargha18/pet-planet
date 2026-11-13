@@ -1,7 +1,7 @@
-package com.petcommerce.fulfillment.controller;
+package com.petcommerce.fulfillment.api.controller;
 
-import com.petcommerce.fulfillment.entity.FulfillmentRecord;
-import com.petcommerce.fulfillment.service.FulfillmentService;
+import com.petcommerce.fulfillment.domain.model.FulfillmentRecord;
+import com.petcommerce.fulfillment.application.FulfillmentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

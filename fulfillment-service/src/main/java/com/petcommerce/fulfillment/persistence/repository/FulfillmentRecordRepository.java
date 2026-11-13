@@ -1,6 +1,6 @@
-package com.petcommerce.fulfillment.repository;
+package com.petcommerce.fulfillment.persistence.repository;
 
-import com.petcommerce.fulfillment.entity.FulfillmentRecord;
+import com.petcommerce.fulfillment.domain.model.FulfillmentRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
