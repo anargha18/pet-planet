@@ -9,7 +9,7 @@ Pet Planet consists of ten Spring Boot services (`gateway-service` plus nine dom
 | Component | Port | Responsibility and communication |
 |---|---:|---|
 | React storefront (`frontend`) | 5173 | Catalog browsing, species filtering, login/registration, browser-local cart, checkout, and order/shipment tracking (`/orders`). Calls `gateway-service` (`:8089`). |
-| API Gateway (`gateway-service`) | 8089 | Spring Cloud Gateway routing `/api/v1/auth/**`, `/users/**`, `/pets/**`, `/orders/**`, `/inventory/**`, `/payments/**`, `/notifications/**`, `/shipments/**`, `/deliveries/**`, and `/fulfillment/**`. |
+| API Gateway (`gateway-service`) | 8089 | Public application entrypoint; handles registration/login, RS256 JWT issuance and validation, edge role authorization, routing, and CORS. |
 | Pet catalog (`pet-catalog-service`) | 8080 | Pet CRUD/search REST API; emits `PetCreatedEvent` (`pet-catalog-events`); consumes `inventory-status-events` to keep `availabilityStatus` (`AVAILABLE`, `RESERVED`, `SOLD`) synchronized. |
 | Order (`order-service`) | 8081 | Persists order and item snapshots; reads catalog over REST; emits `order-created-events`, `order-cancelled-events`, and `order-confirmed-events`; consumes reservation and payment result events. |
 | Inventory (`inventory-service`) | 8082 | Unique pet availability, atomic multi-pet reservation, 5-minute expiry scheduler, and sold-state tracking. Consumes `order-created-events`, `order-confirmed-events`, `order-cancelled-events`, `payment-failed-events`, and `pet-catalog-events`. Emits reservation outcomes and `inventory-status-events`. |
@@ -18,7 +18,7 @@ Pet Planet consists of ten Spring Boot services (`gateway-service` plus nine dom
 | Shipping (`shipping-service`) | 8085 | Consumes `order-confirmed-events`, creates shipment and tracking number with the order's `customerId`, emits `shipment-created-events`, and exposes lookup and manual delivered endpoints. |
 | Delivery tracking (`delivery-tracking-service`) | 8086 | Consumes `shipment-created-events`, creates `IN_TRANSIT` delivery record, emits `delivery-status-updated-events`, and supports `PUT /api/v1/deliveries/order/{orderId}/delivered`. |
 | Fulfillment (`fulfillment-service`) | 8087 | Consumes `delivery-status-updated-events`, creates or updates `FulfillmentRecord` (`SHIPPED`, `DELIVERED`, `ESCALATED`), and emits `fulfillment-updated-events`. |
-| User (`user-service`) | 8088 | Registration/login, RS256 JWT issuance (`JWT_PRIVATE_KEY`), current-user lookup, and `ADMIN` user lookup. |
+| User (`user-service`) | 8088 (internal) | User CRUD, BCrypt credential verification, profile/password management, and soft deactivation; reachable through an internal gateway credential, not a published host port. |
 
 ## Mermaid system diagram
 
@@ -37,11 +37,15 @@ flowchart LR
   Fulfillment[Fulfillment service :8087]
   Kafka[(Kafka :9092)]
 
-  Browser -->|REST| Gateway
-  Gateway -->|/auth, /users| Users
+  Browser -->|REST: /auth and application APIs| Gateway
+  Gateway -->|internal /users + credential check| Users
   Gateway -->|/pets| Catalog
   Gateway -->|/orders| Orders
-  Gateway -->|/payments, /shipments, /notifications| Shipping
+  Gateway -->|/payments| Payment
+  Gateway -->|/shipments| Shipping
+  Gateway -->|/notifications| Notifications
+  Gateway -->|/deliveries| Delivery
+  Gateway -->|/fulfillment| Fulfillment
   Orders -->|Sync REST GET /pets/id| Catalog
 
   Catalog -.->|pet-catalog-events| Kafka
@@ -71,7 +75,7 @@ flowchart LR
 
 ### 1. Happy-path checkout saga
 1. Authenticated customer submits cart items to `POST /api/v1/orders` via `gateway-service`.
-2. `order-service` derives the deterministic numeric `customerId` from the authenticated principal, validates each pet via `pet-catalog-service`, saves the `Order` (`status = CREATED`), and writes `OrderCreatedEvent` (with `orderId`, `customerId`, `petIds`, and `totalAmount`) to `order_outbox`.
+2. `order-service` reads the signed integer `userId` claim from the authenticated token and stores it as `customerId`, validates each pet via `pet-catalog-service`, saves the `Order` (`status = CREATED`), and writes `OrderCreatedEvent` (with `orderId`, `customerId`, `petIds`, and `totalAmount`) to `order_outbox`.
 3. `inventory-service` consumes `OrderCreatedEvent`, verifies all pets in the order are `AVAILABLE`, reserves them (`status = RESERVED`, `orderId` recorded, 5-minute TTL), emits `InventoryStatusChangedEvent` (`RESERVED`) to update `pet-catalog-service`, and emits `PetReservedEvent` carrying `totalAmount`.
 4. `order-service` consumes `PetReservedEvent` and updates the order status to `PAYMENT_PENDING`.
 5. `payment-service` consumes `PetReservedEvent`, charges the order's actual `totalAmount`, persists the `Payment` (`SUCCEEDED`), and emits `PaymentSucceededEvent`.

@@ -81,17 +81,17 @@ function OrderRow({ order, token, onOrderCancelled }) {
     setTrackingLoading(true);
     const results = { payment: null, shipment: null, notification: null };
     try {
-      results.payment = await getPaymentByOrderId(order.id).catch(() => null);
+      results.payment = await getPaymentByOrderId(order.id, token).catch(() => null);
     } catch {
       // not available yet
     }
     try {
-      results.shipment = await getShipmentByOrderId(order.id).catch(() => null);
+      results.shipment = await getShipmentByOrderId(order.id, token).catch(() => null);
     } catch {
       // not available yet
     }
     try {
-      results.notification = await getNotificationByOrderId(order.id).catch(() => null);
+      results.notification = await getNotificationByOrderId(order.id, token).catch(() => null);
     } catch {
       // not available yet
     }
@@ -440,4 +440,3 @@ function OrdersPage() {
 }
 
 export default OrdersPage;
-

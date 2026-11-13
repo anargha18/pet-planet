@@ -12,4 +12,5 @@
 | `shipping-service` | `ShippingServiceTest` (shipment and tracking number creation and idempotency) |
 | `delivery-tracking-service` | `DeliveryTrackingServiceTest` (delivery tracking creation and idempotency) |
 | `fulfillment-service` | `FulfillmentServiceTest` (initial `SHIPPED` projection creation, update to `DELIVERED` on subsequent event, and idempotency) |
-| `user-service` | `AuthControllerTest` (RBAC on `/api/v1/users/{id}`) and `JwtServiceTest` (RS256 token generation, validation, tampering, and expiry) |
+| `gateway-service` | `JwtServiceTest` (RS256 token claims, validation, and tampering) |
+| `user-service` | `UserControllerTest` (internal service-token protection and integer-ID profile lookup) and `UserServiceTest` (registration role and last-admin protection) |

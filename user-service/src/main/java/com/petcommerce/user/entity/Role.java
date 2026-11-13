@@ -1,6 +1,6 @@
 package com.petcommerce.user.entity;
 
 public enum Role {
-    CUSTOMER,
+    USER,
     ADMIN
 }

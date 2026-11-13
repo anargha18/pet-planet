@@ -42,11 +42,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        final String email = jwtService.extractSubject(token);
+        final Integer userId = jwtService.extractUserId(token);
         final String role = jwtService.extractRole(token);
-        if (email != null && role != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        if (userId != null && role != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             var authToken = new UsernamePasswordAuthenticationToken(
-                    email,
+                    userId.toString(),
                     null,
                     Collections.singletonList(new SimpleGrantedAuthority(role))
             );

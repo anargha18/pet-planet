@@ -1,11 +1,14 @@
 # Implementation status
 
+> **Warning (2026-11-13):** The "Implemented" labels below describe code that exists, not verified end-to-end behavior. The [restructuring audit](../restructuring/01-audit-findings.md) found blockers that stop these features working at runtime: seeded logins fail (F1), browser auth is blocked by CORS (F2), and cross-service Kafka events can't be deserialized (F3). It also found saga gaps (S1, S2, S5, S7, S9). This table will be rewritten as the [restructuring phases](../restructuring/02-target-architecture-and-requirements.md#4-implementation-phases-order-matters) land.
+
 ## Feature status (Post-Refactoring)
 
 | Feature | Status | Evidence and qualification |
 |---|---|---|
-| API Gateway (`gateway-service`) | Implemented | Routes `/auth`, `/users`, `/pets`, `/orders`, `/inventory`, `/payments`, `/notifications`, `/shipments`, `/deliveries`, and `/fulfillment` on `:8089`. |
-| User registration/login/RS256 JWT | Implemented | RS256 keypair configured in `.env.example`, `docker-compose.yml`, and service configs. Default `ADMIN` and `CUSTOMER` accounts seeded via Flyway `V2__seed_users.sql`. |
+| API Gateway (`gateway-service`) | Implemented | Publishes the application API, handles register/login, issues and validates RS256 JWTs, applies edge role checks, and routes requests to backend services. |
+| User management and authentication | Implemented | User-service owns BCrypt credentials and integer-ID user CRUD; gateway owns JWTs. User accounts support self profile/password updates, admin CRUD, and soft deactivation; default `ADMIN` and `USER` accounts are seeded/migrated by Flyway. |
+| Internal service boundary | Implemented for local Compose | Backend HTTP ports are not published; user-service requests require a shared gateway token. Production mTLS is still an infrastructure deployment requirement, not configured here. |
 | Pet catalog CRUD/search & sync | Implemented | Seeded with 6 sample pets (`V2__seed_pets.sql`). Consumes `inventory-status-events` to keep `availabilityStatus` synchronized with inventory reservations and sales. |
 | Order create/list/get/cancel & Saga | Implemented | Publishes `OrderCreatedEvent` and `OrderCancelledEvent` via transactional outbox; consumes reservation and payment result events to transition order state (`CREATED -> PAYMENT_PENDING -> PAID / FAILED / CANCELLED`). |
 | Inventory reserve/expiry/sold | Implemented | Atomically reserves all pets in an order (`@Version` optimistic lock), emits `PetReservedEvent` with order `totalAmount`, releases reservations on payment failure or cancellation, and syncs catalog status. |

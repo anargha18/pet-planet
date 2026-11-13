@@ -66,18 +66,8 @@ class OrderServiceTest {
         lenient().when(orderOutboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
-    private Authentication authenticatedUser(String email, String role) {
-        return new UsernamePasswordAuthenticationToken(email, "pw", List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-    }
-
-    private Long customerIdFor(String email) {
-        try {
-            var digest = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(email.trim().toLowerCase(java.util.Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return Math.abs(java.nio.ByteBuffer.wrap(hash, 0, Long.BYTES).getLong());
-        } catch (java.security.NoSuchAlgorithmException ex) {
-            throw new IllegalStateException(ex);
-        }
+    private Authentication authenticatedUser(String userId, String role) {
+        return new UsernamePasswordAuthenticationToken(userId, "pw", List.of(new SimpleGrantedAuthority("ROLE_" + role)));
     }
 
     @Test
@@ -100,7 +90,7 @@ class OrderServiceTest {
         });
 
         CreateOrderRequest request = new CreateOrderRequest(List.of(new CreateOrderItemRequest(petId, 1)));
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
 
         OrderResponse response = orderService.create(request, auth);
 
@@ -135,7 +125,7 @@ class OrderServiceTest {
                 new CreateOrderItemRequest(petId, 1),
                 new CreateOrderItemRequest(petId, 1)
         ));
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
 
         OrderResponse response = orderService.create(request, auth);
 
@@ -146,7 +136,7 @@ class OrderServiceTest {
     void rejectQuantityGreaterThanOne() {
         UUID petId = UUID.randomUUID();
         CreateOrderRequest request = new CreateOrderRequest(List.of(new CreateOrderItemRequest(petId, 2)));
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
 
         assertThrows(IllegalArgumentException.class, () -> orderService.create(request, auth));
     }
@@ -157,7 +147,7 @@ class OrderServiceTest {
         when(petCatalogClient.getPetById(petId)).thenThrow(new PetNotFoundException(petId));
 
         CreateOrderRequest request = new CreateOrderRequest(List.of(new CreateOrderItemRequest(petId, 1)));
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
 
         assertThrows(PetNotFoundException.class, () -> orderService.create(request, auth));
     }
@@ -176,7 +166,7 @@ class OrderServiceTest {
         when(petCatalogClient.getPetById(petId)).thenReturn(pet);
 
         CreateOrderRequest request = new CreateOrderRequest(List.of(new CreateOrderItemRequest(petId, 1)));
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
 
         assertThrows(PetUnavailableException.class, () -> orderService.create(request, auth));
     }
@@ -185,20 +175,20 @@ class OrderServiceTest {
     void getOrder() {
         Order order = new Order();
         order.setId(10L);
-        Long customerId = customerIdFor("customer@example.com");
+        Long customerId = 7L;
         order.setCustomerId(customerId);
         order.setStatus(OrderStatus.CREATED);
         order.setTotalAmount(BigDecimal.valueOf(75000));
         when(orderRepository.findById(10L)).thenReturn(java.util.Optional.of(order));
 
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
         assertDoesNotThrow(() -> orderService.getOrder(10L, auth));
     }
 
     @Test
     void orderNotFound() {
         when(orderRepository.findById(99L)).thenReturn(java.util.Optional.empty());
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
         assertThrows(RuntimeException.class, () -> orderService.getOrder(99L, auth));
     }
 
@@ -206,13 +196,13 @@ class OrderServiceTest {
     void cancelCreatedOrder() {
         Order order = new Order();
         order.setId(12L);
-        Long customerId = customerIdFor("customer@example.com");
+        Long customerId = 7L;
         order.setCustomerId(customerId);
         order.setStatus(OrderStatus.CREATED);
         when(orderRepository.findById(12L)).thenReturn(java.util.Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
         assertDoesNotThrow(() -> orderService.cancel(12L, auth));
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
     }
@@ -221,12 +211,12 @@ class OrderServiceTest {
     void rejectCancellationOfInvalidState() {
         Order order = new Order();
         order.setId(13L);
-        Long customerId = customerIdFor("customer@example.com");
+        Long customerId = 7L;
         order.setCustomerId(customerId);
         order.setStatus(OrderStatus.PAID);
         when(orderRepository.findById(13L)).thenReturn(java.util.Optional.of(order));
 
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
         assertThrows(InvalidOrderStateException.class, () -> orderService.cancel(13L, auth));
     }
 
@@ -234,11 +224,11 @@ class OrderServiceTest {
     void customerCannotAccessAnotherCustomersOrder() {
         Order otherCustomerOrder = new Order();
         otherCustomerOrder.setId(14L);
-        otherCustomerOrder.setCustomerId(customerIdFor("other@example.com"));
+        otherCustomerOrder.setCustomerId(8L);
         otherCustomerOrder.setStatus(OrderStatus.CREATED);
         when(orderRepository.findById(14L)).thenReturn(java.util.Optional.of(otherCustomerOrder));
 
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
         assertThrows(AccessDeniedException.class, () -> orderService.getOrder(14L, auth));
     }
 
@@ -248,7 +238,7 @@ class OrderServiceTest {
         when(petCatalogClient.getPetById(petId)).thenThrow(new PetCatalogUnavailableException("Pet Catalog unavailable"));
 
         CreateOrderRequest request = new CreateOrderRequest(List.of(new CreateOrderItemRequest(petId, 1)));
-        Authentication auth = authenticatedUser("customer@example.com", "CUSTOMER");
+        Authentication auth = authenticatedUser("7", "USER");
 
         assertThrows(PetCatalogUnavailableException.class, () -> orderService.create(request, auth));
     }
