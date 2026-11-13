@@ -1,9 +1,9 @@
-package com.petcommerce.user.controller;
+package com.petcommerce.user.api.controller;
 
-import com.petcommerce.user.config.SecurityConfig;
-import com.petcommerce.user.dto.UserResponse;
+import com.petcommerce.user.security.SecurityConfig;
+import com.petcommerce.user.api.dto.UserResponse;
 import com.petcommerce.user.security.InternalServiceKeyFilter;
-import com.petcommerce.user.service.UserService;
+import com.petcommerce.user.application.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

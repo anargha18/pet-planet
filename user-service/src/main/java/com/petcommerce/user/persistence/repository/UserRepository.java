@@ -1,7 +1,7 @@
-package com.petcommerce.user.repository;
+package com.petcommerce.user.persistence.repository;
 
-import com.petcommerce.user.entity.User;
-import com.petcommerce.user.entity.Role;
+import com.petcommerce.user.domain.model.User;
+import com.petcommerce.user.domain.model.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

@@ -1,4 +1,4 @@
-package com.petcommerce.user.dto;
+package com.petcommerce.user.api.dto;
 
 import java.time.Instant;
 

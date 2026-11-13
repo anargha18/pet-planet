@@ -1,10 +1,10 @@
-package com.petcommerce.user.service;
+package com.petcommerce.user.application;
 
-import com.petcommerce.user.dto.RegisterRequest;
-import com.petcommerce.user.entity.Role;
-import com.petcommerce.user.entity.User;
-import com.petcommerce.user.exception.LastAdminException;
-import com.petcommerce.user.repository.UserRepository;
+import com.petcommerce.user.api.dto.RegisterRequest;
+import com.petcommerce.user.domain.model.Role;
+import com.petcommerce.user.domain.model.User;
+import com.petcommerce.user.domain.exception.LastAdminException;
+import com.petcommerce.user.persistence.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
