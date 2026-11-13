@@ -1,13 +1,14 @@
 package com.petcommerce.delivery.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.petcommerce.delivery.application.DeliveryTrackingService;
 import com.petcommerce.delivery.domain.model.DeliveryRecord;
 import com.petcommerce.delivery.domain.model.DeliveryStatus;
 import com.petcommerce.delivery.messaging.event.ShipmentCreatedEvent;
+import com.petcommerce.delivery.messaging.publisher.DeliveryEventPublisher;
 import com.petcommerce.delivery.persistence.repository.DeliveryOutboxRepository;
 import com.petcommerce.delivery.persistence.repository.DeliveryRecordRepository;
 import com.petcommerce.delivery.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.delivery.application.DeliveryTrackingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,7 +17,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,9 +52,7 @@ class DeliveryTrackingServiceTest {
         deliveryTrackingService = new DeliveryTrackingService(
                 deliveryRecordRepository,
                 processedEventRepository,
-                deliveryOutboxRepository,
-                kafkaTemplate,
-                objectMapper
+                new DeliveryEventPublisher(deliveryOutboxRepository, kafkaTemplate, objectMapper)
         );
     }
 
