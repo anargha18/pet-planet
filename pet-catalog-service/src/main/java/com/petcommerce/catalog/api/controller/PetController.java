@@ -1,11 +1,11 @@
-package com.petcommerce.catalog.controller;
+package com.petcommerce.catalog.api.controller;
 
-import com.petcommerce.catalog.dto.CreatePetRequest;
-import com.petcommerce.catalog.dto.PetResponse;
-import com.petcommerce.catalog.dto.UpdatePetRequest;
-import com.petcommerce.catalog.entity.AvailabilityStatus;
-import com.petcommerce.catalog.entity.Species;
-import com.petcommerce.catalog.service.PetService;
+import com.petcommerce.catalog.api.dto.CreatePetRequest;
+import com.petcommerce.catalog.api.dto.PetResponse;
+import com.petcommerce.catalog.api.dto.UpdatePetRequest;
+import com.petcommerce.catalog.domain.model.AvailabilityStatus;
+import com.petcommerce.catalog.domain.model.Species;
+import com.petcommerce.catalog.application.PetService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

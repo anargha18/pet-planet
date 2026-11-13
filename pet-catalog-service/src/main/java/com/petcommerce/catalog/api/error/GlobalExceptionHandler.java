@@ -1,4 +1,6 @@
-package com.petcommerce.catalog.exception;
+package com.petcommerce.catalog.api.error;
+
+import com.petcommerce.catalog.domain.exception.PetNotFoundException;
 
 import jakarta.servlet.http.HttpServletRequest;
 

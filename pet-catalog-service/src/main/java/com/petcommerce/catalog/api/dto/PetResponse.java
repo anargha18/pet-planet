@@ -1,8 +1,8 @@
-package com.petcommerce.catalog.dto;
+package com.petcommerce.catalog.api.dto;
 
-import com.petcommerce.catalog.entity.AvailabilityStatus;
-import com.petcommerce.catalog.entity.Gender;
-import com.petcommerce.catalog.entity.Species;
+import com.petcommerce.catalog.domain.model.AvailabilityStatus;
+import com.petcommerce.catalog.domain.model.Gender;
+import com.petcommerce.catalog.domain.model.Species;
 
 import java.math.BigDecimal;
 import java.time.Instant;

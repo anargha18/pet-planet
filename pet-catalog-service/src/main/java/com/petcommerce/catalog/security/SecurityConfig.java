@@ -1,4 +1,4 @@
-package com.petcommerce.catalog.config;
+package com.petcommerce.catalog.security;
 
 import com.petcommerce.catalog.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
