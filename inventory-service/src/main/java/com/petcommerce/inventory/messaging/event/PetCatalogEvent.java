@@ -1,15 +1,14 @@
-package com.petcommerce.inventory.event;
+package com.petcommerce.inventory.messaging.event;
 
 import java.time.Instant;
 import java.util.UUID;
 
-public record InventoryStatusChangedEvent(
+public record PetCatalogEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
         UUID petId,
-        String status,
-        Long orderId,
+        String availabilityStatus,
         Instant timestamp
 ) {
 }

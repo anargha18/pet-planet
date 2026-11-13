@@ -1,8 +1,8 @@
-package com.petcommerce.inventory.controller;
+package com.petcommerce.inventory.api.controller;
 
-import com.petcommerce.inventory.entity.PetInventory;
-import com.petcommerce.inventory.repository.PetInventoryRepository;
-import com.petcommerce.inventory.service.InventoryService;
+import com.petcommerce.inventory.domain.model.PetInventory;
+import com.petcommerce.inventory.persistence.repository.PetInventoryRepository;
+import com.petcommerce.inventory.application.InventoryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

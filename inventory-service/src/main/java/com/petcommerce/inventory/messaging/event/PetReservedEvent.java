@@ -1,11 +1,10 @@
-package com.petcommerce.inventory.event;
+package com.petcommerce.inventory.messaging.event;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
-public record OrderCreatedEvent(
+public record PetReservedEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
@@ -13,11 +12,11 @@ public record OrderCreatedEvent(
         Instant timestamp,
         UUID correlationId,
         Long orderId,
-        Long customerId,
-        List<UUID> petIds,
+        UUID reservationId,
+        UUID petId,
         BigDecimal totalAmount
 ) {
-    public OrderCreatedEvent(
+    public PetReservedEvent(
             UUID eventId,
             String eventType,
             Integer eventVersion,
@@ -25,8 +24,9 @@ public record OrderCreatedEvent(
             Instant timestamp,
             UUID correlationId,
             Long orderId,
-            List<UUID> petIds
+            UUID reservationId,
+            UUID petId
     ) {
-        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, 101L, petIds, null);
+        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, reservationId, petId, null);
     }
 }

@@ -1,9 +1,9 @@
-package com.petcommerce.inventory.event;
+package com.petcommerce.inventory.messaging.event;
 
 import java.time.Instant;
 import java.util.UUID;
 
-public record PetReservationReleasedEvent(
+public record PetReservationExpiredEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
@@ -11,7 +11,6 @@ public record PetReservationReleasedEvent(
         Instant timestamp,
         UUID correlationId,
         Long orderId,
-        UUID reservationId,
         UUID petId
 ) {
 }

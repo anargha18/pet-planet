@@ -1,6 +1,6 @@
-package com.petcommerce.inventory.repository;
+package com.petcommerce.inventory.persistence.repository;
 
-import com.petcommerce.inventory.entity.ProcessedEvent;
+import com.petcommerce.inventory.persistence.entity.ProcessedEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

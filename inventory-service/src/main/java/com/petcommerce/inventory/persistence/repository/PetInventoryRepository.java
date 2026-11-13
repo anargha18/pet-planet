@@ -1,7 +1,7 @@
-package com.petcommerce.inventory.repository;
+package com.petcommerce.inventory.persistence.repository;
 
-import com.petcommerce.inventory.entity.InventoryStatus;
-import com.petcommerce.inventory.entity.PetInventory;
+import com.petcommerce.inventory.domain.model.InventoryStatus;
+import com.petcommerce.inventory.domain.model.PetInventory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
