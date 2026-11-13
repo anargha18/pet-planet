@@ -1,7 +1,7 @@
-package com.petcommerce.payment.consumer;
+package com.petcommerce.payment.messaging.consumer;
 
-import com.petcommerce.payment.event.PetReservedEvent;
-import com.petcommerce.payment.service.PaymentService;
+import com.petcommerce.payment.messaging.event.PetReservedEvent;
+import com.petcommerce.payment.application.PaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;

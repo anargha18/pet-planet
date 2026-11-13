@@ -1,7 +1,7 @@
-package com.petcommerce.payment.controller;
+package com.petcommerce.payment.api.controller;
 
-import com.petcommerce.payment.entity.Payment;
-import com.petcommerce.payment.service.PaymentService;
+import com.petcommerce.payment.domain.model.Payment;
+import com.petcommerce.payment.application.PaymentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

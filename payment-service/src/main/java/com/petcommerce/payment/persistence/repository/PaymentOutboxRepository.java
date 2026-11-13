@@ -1,6 +1,6 @@
-package com.petcommerce.payment.repository;
+package com.petcommerce.payment.persistence.repository;
 
-import com.petcommerce.payment.entity.PaymentOutboxEvent;
+import com.petcommerce.payment.persistence.entity.PaymentOutboxEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

@@ -1,4 +1,4 @@
-package com.petcommerce.payment.entity;
+package com.petcommerce.payment.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
