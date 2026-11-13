@@ -1,16 +1,16 @@
-package com.petcommerce.delivery.service;
+package com.petcommerce.delivery.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.delivery.entity.DeliveryOutboxEvent;
-import com.petcommerce.delivery.entity.DeliveryRecord;
-import com.petcommerce.delivery.entity.DeliveryStatus;
-import com.petcommerce.delivery.entity.ProcessedEvent;
-import com.petcommerce.delivery.event.DeliveryStatusUpdatedEvent;
-import com.petcommerce.delivery.event.ShipmentCreatedEvent;
-import com.petcommerce.delivery.repository.DeliveryOutboxRepository;
-import com.petcommerce.delivery.repository.DeliveryRecordRepository;
-import com.petcommerce.delivery.repository.ProcessedEventRepository;
+import com.petcommerce.delivery.persistence.entity.DeliveryOutboxEvent;
+import com.petcommerce.delivery.domain.model.DeliveryRecord;
+import com.petcommerce.delivery.domain.model.DeliveryStatus;
+import com.petcommerce.delivery.persistence.entity.ProcessedEvent;
+import com.petcommerce.delivery.messaging.event.DeliveryStatusUpdatedEvent;
+import com.petcommerce.delivery.messaging.event.ShipmentCreatedEvent;
+import com.petcommerce.delivery.persistence.repository.DeliveryOutboxRepository;
+import com.petcommerce.delivery.persistence.repository.DeliveryRecordRepository;
+import com.petcommerce.delivery.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;

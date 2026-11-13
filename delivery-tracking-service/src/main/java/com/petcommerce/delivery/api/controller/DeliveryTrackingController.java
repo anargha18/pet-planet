@@ -1,7 +1,7 @@
-package com.petcommerce.delivery.controller;
+package com.petcommerce.delivery.api.controller;
 
-import com.petcommerce.delivery.entity.DeliveryRecord;
-import com.petcommerce.delivery.service.DeliveryTrackingService;
+import com.petcommerce.delivery.domain.model.DeliveryRecord;
+import com.petcommerce.delivery.application.DeliveryTrackingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

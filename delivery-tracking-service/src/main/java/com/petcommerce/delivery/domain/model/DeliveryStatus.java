@@ -1,4 +1,4 @@
-package com.petcommerce.delivery.entity;
+package com.petcommerce.delivery.domain.model;
 
 public enum DeliveryStatus {
     IN_TRANSIT,

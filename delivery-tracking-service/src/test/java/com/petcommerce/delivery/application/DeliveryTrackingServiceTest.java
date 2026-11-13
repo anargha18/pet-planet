@@ -1,13 +1,13 @@
-package com.petcommerce.delivery;
+package com.petcommerce.delivery.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.delivery.entity.DeliveryRecord;
-import com.petcommerce.delivery.entity.DeliveryStatus;
-import com.petcommerce.delivery.event.ShipmentCreatedEvent;
-import com.petcommerce.delivery.repository.DeliveryOutboxRepository;
-import com.petcommerce.delivery.repository.DeliveryRecordRepository;
-import com.petcommerce.delivery.repository.ProcessedEventRepository;
-import com.petcommerce.delivery.service.DeliveryTrackingService;
+import com.petcommerce.delivery.domain.model.DeliveryRecord;
+import com.petcommerce.delivery.domain.model.DeliveryStatus;
+import com.petcommerce.delivery.messaging.event.ShipmentCreatedEvent;
+import com.petcommerce.delivery.persistence.repository.DeliveryOutboxRepository;
+import com.petcommerce.delivery.persistence.repository.DeliveryRecordRepository;
+import com.petcommerce.delivery.persistence.repository.ProcessedEventRepository;
+import com.petcommerce.delivery.application.DeliveryTrackingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
