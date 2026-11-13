@@ -1,4 +1,4 @@
-package com.petcommerce.gateway.dto;
+package com.petcommerce.gateway.api.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

@@ -1,6 +1,6 @@
 package com.petcommerce.gateway.security;
 
-import com.petcommerce.gateway.dto.UserResponse;
+import com.petcommerce.gateway.api.dto.UserResponse;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.springframework.beans.factory.annotation.Value;
