@@ -8,17 +8,17 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.PreUpdate;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "users")
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
     @Column(nullable = false, unique = true)
     private String email;
@@ -35,6 +35,9 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
+
+    @Column(nullable = false)
+    private boolean active = true;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -55,7 +58,7 @@ public class User {
         this.updatedAt = this.createdAt;
     }
 
-    public UUID getId() {
+    public Integer getId() {
         return id;
     }
 
@@ -79,6 +82,10 @@ public class User {
         return role;
     }
 
+    public boolean isActive() {
+        return active;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -87,7 +94,34 @@ public class User {
         return updatedAt;
     }
 
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
+    public void updateProfile(String email, String firstName, String lastName, Role role, Boolean active) {
+        if (email != null) {
+            this.email = email;
+        }
+        if (firstName != null) {
+            this.firstName = firstName;
+        }
+        if (lastName != null) {
+            this.lastName = lastName;
+        }
+        if (role != null) {
+            this.role = role;
+        }
+        if (active != null) {
+            this.active = active;
+        }
+    }
+
+    public void updatePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = Instant.now();
     }
 }

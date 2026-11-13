@@ -1,19 +1,34 @@
 # API reference
 
-All endpoints below are accessible both directly on each service's host port and through **`gateway-service` (`http://localhost:8089`)**.
+Application HTTP APIs are exposed through **`gateway-service` (`http://localhost:8089`)**. Backend service ports are private in Docker Compose.
 
 ## API Gateway (`gateway-service`, port 8089)
 
-Routes `/api/v1/auth/**` and `/api/v1/users/**` to `user-service:8088`, `/api/v1/pets/**` to `pet-catalog-service:8080`, `/api/v1/orders/**` to `order-service:8081`, `/api/v1/inventory/**` to `inventory-service:8082`, `/api/v1/payments/**` to `payment-service:8083`, `/api/v1/notifications/**` to `notification-service:8084`, `/api/v1/shipments/**` to `shipping-service:8085`, `/api/v1/deliveries/**` to `delivery-tracking-service:8086`, and `/api/v1/fulfillment/**` to `fulfillment-service:8087`.
+The gateway handles `/api/v1/auth/**` and routes `/api/v1/users/**` to the internal `user-service:8088`, `/api/v1/pets/**` to `pet-catalog-service:8080`, `/api/v1/orders/**` to `order-service:8081`, `/api/v1/inventory/**` to `inventory-service:8082`, `/api/v1/payments/**` to `payment-service:8083`, `/api/v1/notifications/**` to `notification-service:8084`, `/api/v1/shipments/**` to `shipping-service:8085`, `/api/v1/deliveries/**` to `delivery-tracking-service:8086`, and `/api/v1/fulfillment/**` to `fulfillment-service:8087`.
 
-## User & Authentication (`user-service`, port 8088)
+All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. The gateway's `/auth/register` and `/auth/login` handlers are public. Catalog writes and inventory routes require `ADMIN`; order routes require `USER` or `ADMIN`; user management endpoints have the rules listed below. Customer-specific lists and tracking lookups are owner-scoped at the gateway; domain services retain relevant token and ownership checks as defense in depth.
+
+## Authentication (`gateway-service`)
 
 | Method/path | Request and behavior | Response/status/access |
 |---|---|---|
-| `POST /api/v1/auth/register` | JSON: `email`, `password`, `firstName`, `lastName`. | `AuthResponse` (`token`, `tokenType`, `email`, `role`), `201 Created`. Public. |
-| `POST /api/v1/auth/login` | JSON: `email`, `password`. | `AuthResponse`, `200 OK`. Public. |
-| `GET /api/v1/users/me` | Current authenticated profile. | `UserResponse` (`id`, `email`, `firstName`, `lastName`, `role`), `200 OK`. Bearer JWT required. |
-| `GET /api/v1/users/{id}` | Lookup user by UUID. | `UserResponse`, `200 OK`. `ROLE_ADMIN` required. |
+| `POST /api/v1/auth/register` | JSON: `email`, `password` (minimum 8 chars), `firstName`, `lastName`. Always creates a `USER`; public requests cannot select `ADMIN`. | `AuthResponse` (`token`, `tokenType`, integer `id`, `email`, `role`), `201 Created`. Public. |
+| `POST /api/v1/auth/login` | JSON: `email`, `password`. Gateway delegates credential verification to the internal user service and issues the JWT. | `AuthResponse`, `200 OK`; `401` for invalid credentials. Public. |
+
+## User management (`user-service`, internal port 8088)
+
+The gateway authorizes these operations and passes a trusted authenticated user ID for self-service endpoints. User-service endpoints require the gateway/user-service internal token.
+
+| Method/path | Request and behavior | Response/status/access |
+|---|---|---|
+| `GET /api/v1/users/me` | Current active profile. | `UserResponse` (`id` integer, `email`, `firstName`, `lastName`, `role`, `active`, `createdAt`, `updatedAt`), `200 OK`. `USER` or `ADMIN`. |
+| `PATCH /api/v1/users/me` | JSON: `email`, `firstName`, `lastName`; updates only the caller's profile. | `UserResponse`, `200 OK`. `USER` or `ADMIN`. |
+| `PUT /api/v1/users/me/password` | JSON: `currentPassword`, `newPassword` (minimum 8 chars). | `204 No Content`; `401` if current password is incorrect. `USER` or `ADMIN`. |
+| `GET /api/v1/users` | Pageable list (`page`, `size`, `sort`); includes active and inactive users. | `Page<UserResponse>`, `200 OK`. `ADMIN`. |
+| `POST /api/v1/users` | JSON: `email`, `password`, `firstName`, `lastName`, `role`. | `UserResponse`, `201 Created`. `ADMIN`. |
+| `GET /api/v1/users/{id}` | Lookup by generated integer ID. | `UserResponse`, `200 OK`; `404` if absent. `ADMIN`. |
+| `PATCH /api/v1/users/{id}` | Optional `email`, `firstName`, `lastName`, `role`, `active` fields. | `UserResponse`, `200 OK`; `409` if this would demote or deactivate the last active admin. `ADMIN`. |
+| `DELETE /api/v1/users/{id}` | Soft-deactivates the account; the row and email remain. | `204 No Content`; `409` if this would deactivate the last active admin. `ADMIN`. |
 
 ## Pet Catalog (`pet-catalog-service`, port 8080)
 
@@ -21,54 +36,38 @@ Routes `/api/v1/auth/**` and `/api/v1/users/**` to `user-service:8088`, `/api/v1
 |---|---|---|
 | `GET /api/v1/pets` | Optional `species`, `breed`, `minPrice`, `maxPrice`, `availabilityStatus`, pageable (`page`, `size`, `sort`). | `Page<PetResponse>`, `200 OK`. Public. |
 | `GET /api/v1/pets/{petId}` | `petId` is UUID. | `PetResponse`, `200 OK`; `404` if missing. Public. |
-| `POST /api/v1/pets` | JSON: `name`, `species`, `breed`, `age`, `gender`, `price`, `description`. Emits `PetCreatedEvent`. | `PetResponse`, `201 Created`. `ROLE_ADMIN` required. |
-| `PUT /api/v1/pets/{petId}` | Full pet fields including `availabilityStatus`. | `PetResponse`, `200 OK`. `ROLE_ADMIN` required. |
-| `DELETE /api/v1/pets/{petId}` | Hard delete by UUID. | `204 No Content`. `ROLE_ADMIN` required. |
+| `POST /api/v1/pets` | JSON: `name`, `species`, `breed`, `age`, `gender`, `price`, `description`. Emits `PetCreatedEvent`. | `PetResponse`, `201 Created`. `ADMIN`. |
+| `PUT /api/v1/pets/{petId}` | Full pet fields including `availabilityStatus`. | `PetResponse`, `200 OK`. `ADMIN`. |
+| `DELETE /api/v1/pets/{petId}` | Hard delete by UUID. | `204 No Content`. `ADMIN`. |
 
 ## Orders (`order-service`, port 8081)
 
-All `/api/v1/orders/**` endpoints require `ROLE_CUSTOMER` or `ROLE_ADMIN` Bearer JWT. Customer identity (`Long customerId`) is derived deterministically from the authenticated JWT principal.
+`customerId` is the integer user ID from the signed token, stored in the order as a `Long`. `USER` callers are limited to their own orders; `ADMIN` callers may inspect any order.
 
 | Method/path | Request and behavior | Response/status/access |
 |---|---|---|
-| `POST /api/v1/orders` | `{ "items": [{ "petId": "UUID", "quantity": 1 }] }`. Validates catalog pets, saves order (`CREATED`), and publishes `OrderCreatedEvent`. | `OrderResponse`, `201 Created`. `CUSTOMER` or `ADMIN`. |
-| `GET /api/v1/orders/{orderId}` | Numeric order ID. Customers may only access their own orders; Admins may access any order. | `OrderResponse`, `200 OK`. `CUSTOMER` or `ADMIN`. |
-| `GET /api/v1/orders` | Optional `customerId`, `status`, pageable (`page`, `size`, `sort`). Customers are scoped to their own `customerId`. | `Page<OrderResponse>`, `200 OK`. `CUSTOMER` or `ADMIN`. |
+| `POST /api/v1/orders` | `{ "items": [{ "petId": "UUID", "quantity": 1 }] }`. Validates catalog pets, saves the order (`CREATED`), and publishes `OrderCreatedEvent`. | `OrderResponse`, `201 Created`. `USER` or `ADMIN`. |
+| `GET /api/v1/orders/{orderId}` | Numeric order ID. | `OrderResponse`, `200 OK`. `USER` or `ADMIN`, owner-scoped for `USER`. |
+| `GET /api/v1/orders` | Optional `customerId`, `status`, pageable (`page`, `size`, `sort`). `USER` callers are scoped to their own `customerId`. | `Page<OrderResponse>`, `200 OK`. `USER` or `ADMIN`. |
 | `PATCH /api/v1/orders/{orderId}/cancel` | Cancels an order in `CREATED` or `PAYMENT_PENDING` state and emits `OrderCancelledEvent`. | `OrderResponse`, `200 OK`; `409 Conflict` if already paid/confirmed. |
 
 ## Inventory (`inventory-service`, port 8082)
 
-All `/api/v1/inventory/**` endpoints require `ROLE_ADMIN` Bearer JWT.
+All `/api/v1/inventory/**` endpoints require `ADMIN`.
 
-| Method/path | Request and behavior | Response/status |
+| Method/path | Purpose | Response/status |
 |---|---|---|
 | `GET /api/v1/inventory/pets/{petId}` | Returns inventory status for UUID `petId`. | `InventoryResponse`, `200 OK`. |
-| `POST /api/v1/inventory/pets/{petId}/reserve` | Manually reserves pet. | `InventoryResponse`, `200 OK`. |
+| `POST /api/v1/inventory/pets/{petId}/reserve` | Manually reserves a pet. | `InventoryResponse`, `200 OK`. |
 | `POST /api/v1/inventory/pets/{petId}/release` | Releases reservation and syncs catalog. | `InventoryResponse`, `200 OK`. |
 | `POST /api/v1/inventory/pets/{petId}/sold` | Marks pet sold. | `InventoryResponse`, `200 OK`. |
 
-## Payment (`payment-service`, port 8083)
+## Payments, notifications, shipping, delivery, and fulfillment
 
-| Method/path | Purpose | Response/status |
-|---|---|---|
-| `GET /api/v1/payments/order/{orderId}` | Lookup payment record by numeric `orderId`. | `Payment` entity JSON, `200 OK`; `404` if absent. |
+These APIs require a valid gateway bearer token. Existing service-level ownership checks apply where implemented.
 
-## Notifications (`notification-service`, port 8084)
-
-| Method/path | Purpose | Response/status |
-|---|---|---|
-| `GET /api/v1/notifications/order/{orderId}` | Lookup notification by numeric `orderId`. | `Notification`, `200 OK`; `404` if absent. |
-| `GET /api/v1/notifications/customer/{customerId}` | List notifications for numeric `customerId`. | `List<Notification>`, `200 OK`. |
-
-## Shipping (`shipping-service`, port 8085)
-
-| Method/path | Purpose | Response/status |
-|---|---|---|
-| `GET /api/v1/shipments/order/{orderId}` | Lookup shipment by numeric `orderId`. | `Shipment`, `200 OK`; `404` if absent. |
-| `GET /api/v1/shipments/customer/{customerId}` | List shipments for numeric `customerId`. | `List<Shipment>`, `200 OK`. |
-| `PUT /api/v1/shipments/order/{orderId}/delivered` | Mark shipment `DELIVERED`. | `Shipment`, `200 OK`. |
-
-## Delivery Tracking (`delivery-tracking-service`, port 8086) & Fulfillment (`fulfillment-service`, port 8087)
-
-- `GET /api/v1/deliveries/order/{orderId}`, `GET /api/v1/deliveries/customer/{customerId}`, `PUT /api/v1/deliveries/order/{orderId}/delivered`
-- `GET /api/v1/fulfillment/order/{orderId}`, `GET /api/v1/fulfillment/customer/{customerId}`
+- `GET /api/v1/payments/order/{orderId}` — payment record by numeric order ID.
+- `GET /api/v1/notifications/order/{orderId}`, `GET /api/v1/notifications/customer/{customerId}`.
+- `GET /api/v1/shipments/order/{orderId}`, `GET /api/v1/shipments/customer/{customerId}`, `PUT /api/v1/shipments/order/{orderId}/delivered`.
+- `GET /api/v1/deliveries/order/{orderId}`, `GET /api/v1/deliveries/customer/{customerId}`, `PUT /api/v1/deliveries/order/{orderId}/delivered`.
+- `GET /api/v1/fulfillment/order/{orderId}`, `GET /api/v1/fulfillment/customer/{customerId}`.

@@ -73,7 +73,7 @@ class OrderControllerTest {
         String body = "{\"items\":[{\"petId\":\"" + petId + "\",\"quantity\":1}]}";
 
         mockMvc.perform(post("/api/v1/orders")
-                        .with(user("customer@example.com").roles("CUSTOMER"))
+                        .with(user("7").roles("USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
@@ -94,7 +94,7 @@ class OrderControllerTest {
         Mockito.when(orderService.getOrder(eq(1L), any())).thenReturn(orderResponse);
 
         mockMvc.perform(get("/api/v1/orders/1")
-                        .with(user("customer@example.com").roles("CUSTOMER")))
+                        .with(user("7").roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
     }
@@ -104,7 +104,7 @@ class OrderControllerTest {
         String body = "{\"items\":[]}";
 
         mockMvc.perform(post("/api/v1/orders")
-                        .with(user("customer@example.com").roles("CUSTOMER"))
+                        .with(user("7").roles("USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest());
@@ -115,7 +115,7 @@ class OrderControllerTest {
         Mockito.when(orderService.getOrder(eq(999L), any())).thenThrow(new OrderNotFoundException(999L));
 
         mockMvc.perform(get("/api/v1/orders/999")
-                        .with(user("customer@example.com").roles("CUSTOMER")))
+                        .with(user("7").roles("USER")))
                 .andExpect(status().isNotFound());
     }
 
@@ -124,7 +124,7 @@ class OrderControllerTest {
         Mockito.when(orderService.cancel(eq(1L), any())).thenThrow(new InvalidOrderStateException(1L, "PAID"));
 
         mockMvc.perform(patch("/api/v1/orders/1/cancel")
-                        .with(user("customer@example.com").roles("CUSTOMER")))
+                        .with(user("7").roles("USER")))
                 .andExpect(status().isConflict());
     }
 
@@ -136,7 +136,7 @@ class OrderControllerTest {
         String body = "{\"items\":[{\"petId\":\"" + UUID.randomUUID() + "\",\"quantity\":1}]}";
 
         mockMvc.perform(post("/api/v1/orders")
-                        .with(user("customer@example.com").roles("CUSTOMER"))
+                        .with(user("7").roles("USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isServiceUnavailable());

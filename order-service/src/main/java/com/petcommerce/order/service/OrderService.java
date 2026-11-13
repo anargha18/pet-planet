@@ -42,15 +42,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -425,7 +420,7 @@ public class OrderService {
         if (hasRole(authentication, "ADMIN")) {
             return;
         }
-        if (!hasRole(authentication, "CUSTOMER")) {
+        if (!hasRole(authentication, "USER")) {
             throw new AccessDeniedException("Insufficient permissions");
         }
         Long authenticatedCustomerId = resolveCustomerId(authentication);
@@ -450,13 +445,9 @@ public class OrderService {
             throw new AccessDeniedException("Authentication principal is missing");
         }
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(principalName.trim().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
-            ByteBuffer buffer = ByteBuffer.wrap(hash, 0, Long.BYTES);
-            long value = buffer.getLong();
-            return value == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(value);
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is required to derive the authenticated customer identity", ex);
+            return (long) Integer.parseInt(principalName);
+        } catch (NumberFormatException ex) {
+            throw new AccessDeniedException("Authenticated user ID is invalid", ex);
         }
     }
 

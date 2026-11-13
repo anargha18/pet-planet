@@ -1,5 +1,6 @@
-package com.petcommerce.user.security;
+package com.petcommerce.gateway.security;
 
+import com.petcommerce.gateway.dto.UserResponse;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,15 +14,16 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class JwtService {
 
     @Value("${jwt.private-key:}")
-    private String jwtPrivateKey;
+    private String privateKey;
 
     @Value("${jwt.public-key:}")
-    private String jwtPublicKey;
+    private String publicKey;
 
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
@@ -32,61 +34,44 @@ public class JwtService {
     @Value("${jwt.audience:pet-planet}")
     private String audience;
 
-    public String generateToken(String email, String role) {
+    public String generateToken(UserResponse user) {
         Date now = new Date();
-        Date expiry = new Date(now.getTime() + expirationMs);
-
         return Jwts.builder()
                 .issuer(issuer)
                 .audience().add(audience).and()
-                .claims(Map.of("role", normalizeRole(role)))
-                .subject(email)
+                .claims(Map.of("userId", user.id(), "role", normalizeRole(user.role())))
+                .subject(user.email())
                 .issuedAt(now)
-                .expiration(expiry)
+                .expiration(new Date(now.getTime() + expirationMs))
                 .signWith(getSigningKey(), Jwts.SIG.RS256)
                 .compact();
     }
 
-    public String extractEmail(String token) {
-        return extractAllClaims(token).getSubject();
-    }
-
-    public String extractRole(String token) {
-        return normalizeRole(extractAllClaims(token).get("role", String.class));
-    }
-
-    public boolean isTokenValid(String token) {
-        try {
-            Claims claims = Jwts.parser()
-                    .requireIssuer(issuer)
-                    .requireAudience(audience)
-                    .verifyWith(getVerificationKey())
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
-            return claims.getExpiration() != null && claims.getExpiration().after(new Date())
-                    && claims.get("role", String.class) != null;
-        } catch (Exception ex) {
-            return false;
-        }
-    }
-
-    private Claims extractAllClaims(String token) {
-        return Jwts.parser()
+    public AuthenticatedUser validate(String token) {
+        Claims claims = Jwts.parser()
                 .requireIssuer(issuer)
                 .requireAudience(audience)
                 .verifyWith(getVerificationKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+
+        Integer userId = claims.get("userId", Integer.class);
+        String email = claims.getSubject();
+        String role = normalizeRole(claims.get("role", String.class));
+        if (userId == null || userId <= 0 || email == null || email.isBlank()
+                || role == null || !Set.of("ROLE_USER", "ROLE_ADMIN").contains(role)) {
+            throw new IllegalArgumentException("Invalid authentication token claims");
+        }
+        return new AuthenticatedUser(userId, email, role);
     }
 
     private PrivateKey getSigningKey() {
-        return parsePrivateKey(jwtPrivateKey);
+        return parsePrivateKey(privateKey);
     }
 
     private PublicKey getVerificationKey() {
-        return parsePublicKey(jwtPublicKey);
+        return parsePublicKey(publicKey);
     }
 
     private PrivateKey parsePrivateKey(String pem) {
@@ -95,8 +80,6 @@ public class JwtService {
         }
         String normalized = pem.replace("-----BEGIN PRIVATE KEY-----", "")
                 .replace("-----END PRIVATE KEY-----", "")
-                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                .replace("-----END RSA PRIVATE KEY-----", "")
                 .replaceAll("\\s+", "");
         try {
             byte[] keyBytes = Base64.getDecoder().decode(normalized);
@@ -112,8 +95,6 @@ public class JwtService {
         }
         String normalized = pem.replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
-                .replace("-----BEGIN RSA PUBLIC KEY-----", "")
-                .replace("-----END RSA PUBLIC KEY-----", "")
                 .replaceAll("\\s+", "");
         try {
             byte[] keyBytes = Base64.getDecoder().decode(normalized);
@@ -128,5 +109,8 @@ public class JwtService {
             return null;
         }
         return role.startsWith("ROLE_") ? role : "ROLE_" + role;
+    }
+
+    public record AuthenticatedUser(Integer id, String email, String role) {
     }
 }

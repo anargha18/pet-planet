@@ -1,12 +1,15 @@
 package com.petcommerce.user.dto;
 
-import java.util.UUID;
+import java.time.Instant;
 
 public record UserResponse(
-        UUID id,
+        Integer id,
         String email,
         String firstName,
         String lastName,
-        String role
+        String role,
+        boolean active,
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }
