@@ -368,7 +368,7 @@ Each phase ends with a working, runnable system and its own commit/PR. Phases 0â
 
 ### Progress log
 
-**Phase 0a: done (2026-11-14).** Root aggregator POM and Maven wrapper (R-INF-01, aggregator only). Every service re-packaged (R-STR-02 steps A and B). ArchUnit rules in all services (R-STR-03). Frontend grouped by feature (R-STR-05). Stray root `node_modules/` removed (R-STR-06). Test baseline before and after: same 49 functional tests, all passing, plus 110 architecture checks. Frontend production build passes; only import lines changed in moved files.
+**Phase 0a: done (2026-11-14).** Root aggregator POM and Maven wrapper (R-INF-01, aggregator only). Every service re-packaged (R-STR-02 steps A and B). ArchUnit rules in all services (R-STR-03). Frontend grouped by feature (R-STR-05). Stray root `node_modules/` removed (R-STR-06). Test baseline before and after: same 49 functional tests, all passing, plus 110 architecture checks. Frontend production build passes; only import lines changed in moved files. `docker compose build` succeeds for all 11 images; service Dockerfiles now share a BuildKit Maven download cache (`--mount=type=cache,id=pet-planet-m2`), the first part of R-INF-02, added after a dropped Maven Central download broke the first build attempt.
 
 Deviations from the plan above, made deliberately:
 - **Application services return response DTOs** (via `api.mapper`, inside the transaction) instead of entities. `Order.items` is lazy and `open-in-view` is off, so mapping outside the transaction would throw. R-STR-03 was adjusted accordingly (see [code-structure.md](../project-context/code-structure.md)).
