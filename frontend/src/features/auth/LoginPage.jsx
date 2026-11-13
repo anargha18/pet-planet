@@ -12,8 +12,8 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { extractApiError, loginUser } from '../services/api';
+import { useAuth } from './AuthContext';
+import { extractApiError, loginUser } from '../../api';
 
 const initialState = { email: '', password: '' };
 

@@ -13,9 +13,9 @@ import {
   Typography,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
-import { createOrder, extractApiError, getCurrentUser } from '../services/api';
+import { useAuth } from '../auth';
+import { useCart } from '../cart';
+import { createOrder, extractApiError, getCurrentUser } from '../../api';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {

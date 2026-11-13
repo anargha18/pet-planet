@@ -1,15 +1,10 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import Layout from './components/Layout';
-import { AuthProvider } from './context/AuthContext';
-import { CartProvider } from './context/CartContext';
-import CartPage from './pages/CartPage';
-import CheckoutPage from './pages/CheckoutPage';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import OrdersPage from './pages/OrdersPage';
-import PetDetailPage from './pages/PetDetailPage';
-import PetsPage from './pages/PetsPage';
-import RegisterPage from './pages/RegisterPage';
+import Layout from '../components/Layout';
+import { AuthProvider, LoginPage, RegisterPage } from '../features/auth';
+import { CartPage, CartProvider } from '../features/cart';
+import { HomePage, PetDetailPage, PetsPage } from '../features/catalog';
+import { CheckoutPage } from '../features/checkout';
+import { OrdersPage } from '../features/orders';
 
 function App() {
   return (

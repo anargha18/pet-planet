@@ -19,8 +19,8 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
 import { Link, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
+import { useAuth } from '../features/auth';
+import { useCart } from '../features/cart';
 
 const navItems = [
   { label: 'Home', path: '/' },
