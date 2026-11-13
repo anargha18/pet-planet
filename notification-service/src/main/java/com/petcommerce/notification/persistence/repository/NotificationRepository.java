@@ -1,6 +1,6 @@
-package com.petcommerce.notification.repository;
+package com.petcommerce.notification.persistence.repository;
 
-import com.petcommerce.notification.entity.Notification;
+import com.petcommerce.notification.domain.model.Notification;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

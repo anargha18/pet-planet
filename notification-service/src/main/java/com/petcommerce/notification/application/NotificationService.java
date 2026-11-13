@@ -1,16 +1,16 @@
-package com.petcommerce.notification.service;
+package com.petcommerce.notification.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.notification.entity.Notification;
-import com.petcommerce.notification.entity.NotificationOutboxEvent;
-import com.petcommerce.notification.entity.NotificationStatus;
-import com.petcommerce.notification.entity.ProcessedEvent;
-import com.petcommerce.notification.event.NotificationSentEvent;
-import com.petcommerce.notification.event.OrderConfirmedEvent;
-import com.petcommerce.notification.repository.NotificationOutboxRepository;
-import com.petcommerce.notification.repository.NotificationRepository;
-import com.petcommerce.notification.repository.ProcessedEventRepository;
+import com.petcommerce.notification.domain.model.Notification;
+import com.petcommerce.notification.persistence.entity.NotificationOutboxEvent;
+import com.petcommerce.notification.domain.model.NotificationStatus;
+import com.petcommerce.notification.persistence.entity.ProcessedEvent;
+import com.petcommerce.notification.messaging.event.NotificationSentEvent;
+import com.petcommerce.notification.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.notification.persistence.repository.NotificationOutboxRepository;
+import com.petcommerce.notification.persistence.repository.NotificationRepository;
+import com.petcommerce.notification.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;

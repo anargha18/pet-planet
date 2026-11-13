@@ -1,4 +1,4 @@
-package com.petcommerce.notification.event;
+package com.petcommerce.notification.messaging.event;
 
 import java.math.BigDecimal;
 import java.time.Instant;

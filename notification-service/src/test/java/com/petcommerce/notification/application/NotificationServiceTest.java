@@ -1,13 +1,13 @@
-package com.petcommerce.notification;
+package com.petcommerce.notification.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.notification.entity.Notification;
-import com.petcommerce.notification.entity.NotificationStatus;
-import com.petcommerce.notification.event.OrderConfirmedEvent;
-import com.petcommerce.notification.repository.NotificationOutboxRepository;
-import com.petcommerce.notification.repository.NotificationRepository;
-import com.petcommerce.notification.repository.ProcessedEventRepository;
-import com.petcommerce.notification.service.NotificationService;
+import com.petcommerce.notification.domain.model.Notification;
+import com.petcommerce.notification.domain.model.NotificationStatus;
+import com.petcommerce.notification.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.notification.persistence.repository.NotificationOutboxRepository;
+import com.petcommerce.notification.persistence.repository.NotificationRepository;
+import com.petcommerce.notification.persistence.repository.ProcessedEventRepository;
+import com.petcommerce.notification.application.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

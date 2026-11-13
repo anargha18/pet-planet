@@ -1,6 +1,6 @@
-package com.petcommerce.notification.repository;
+package com.petcommerce.notification.persistence.repository;
 
-import com.petcommerce.notification.entity.NotificationOutboxEvent;
+import com.petcommerce.notification.persistence.entity.NotificationOutboxEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

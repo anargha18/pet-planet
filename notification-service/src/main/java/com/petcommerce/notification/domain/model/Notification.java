@@ -1,4 +1,4 @@
-package com.petcommerce.notification.entity;
+package com.petcommerce.notification.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

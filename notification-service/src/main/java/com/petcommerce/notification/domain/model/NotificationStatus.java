@@ -1,4 +1,4 @@
-package com.petcommerce.notification.entity;
+package com.petcommerce.notification.domain.model;
 
 public enum NotificationStatus {
     PENDING,

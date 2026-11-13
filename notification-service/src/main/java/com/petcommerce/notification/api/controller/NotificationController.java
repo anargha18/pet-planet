@@ -1,7 +1,7 @@
-package com.petcommerce.notification.controller;
+package com.petcommerce.notification.api.controller;
 
-import com.petcommerce.notification.entity.Notification;
-import com.petcommerce.notification.service.NotificationService;
+import com.petcommerce.notification.domain.model.Notification;
+import com.petcommerce.notification.application.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
