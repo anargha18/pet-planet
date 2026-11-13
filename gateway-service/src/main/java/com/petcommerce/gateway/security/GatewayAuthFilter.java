@@ -43,6 +43,9 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         if (method == HttpMethod.OPTIONS || path.equals("/actuator/health") || isPublicCatalogRead(path, method)) {
             return chain.filter(exchange);
         }
+        if (isPublicAuthRequest(path, method)) {
+            return forwardPublicAuthRequest(exchange, chain);
+        }
 
         String authorization = exchange.getRequest().getHeaders().getFirst("Authorization");
         if (authorization == null || !authorization.startsWith("Bearer ")) {
@@ -92,6 +95,27 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return -100;
+    }
+
+    private boolean isPublicAuthRequest(String path, HttpMethod method) {
+        return method == HttpMethod.POST && (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/register"));
+    }
+
+    /**
+     * Login and registration are public, but user-service only accepts gateway traffic: strip any
+     * client-supplied identity headers and attach the internal service token.
+     */
+    private Mono<Void> forwardPublicAuthRequest(ServerWebExchange exchange, GatewayFilterChain chain) {
+        if (internalServiceToken.isBlank()) {
+            return reject(exchange, HttpStatus.SERVICE_UNAVAILABLE, "User service authentication is not configured");
+        }
+        var request = exchange.getRequest().mutate().headers(headers -> {
+            headers.remove("X-Authenticated-User-Id");
+            headers.remove("X-Authenticated-User-Email");
+            headers.remove("X-Authenticated-User-Role");
+            headers.set("X-Internal-Service-Token", internalServiceToken);
+        }).build();
+        return chain.filter(exchange.mutate().request(request).build());
     }
 
     private boolean isPublicCatalogRead(String path, HttpMethod method) {
