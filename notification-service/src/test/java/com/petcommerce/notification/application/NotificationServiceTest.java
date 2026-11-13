@@ -1,13 +1,14 @@
 package com.petcommerce.notification.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.petcommerce.notification.application.NotificationService;
 import com.petcommerce.notification.domain.model.Notification;
 import com.petcommerce.notification.domain.model.NotificationStatus;
 import com.petcommerce.notification.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.notification.messaging.publisher.NotificationEventPublisher;
 import com.petcommerce.notification.persistence.repository.NotificationOutboxRepository;
 import com.petcommerce.notification.persistence.repository.NotificationRepository;
 import com.petcommerce.notification.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.notification.application.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,9 +54,7 @@ class NotificationServiceTest {
         notificationService = new NotificationService(
                 notificationRepository,
                 processedEventRepository,
-                notificationOutboxRepository,
-                kafkaTemplate,
-                objectMapper
+                new NotificationEventPublisher(notificationOutboxRepository, kafkaTemplate, objectMapper)
         );
     }
 
