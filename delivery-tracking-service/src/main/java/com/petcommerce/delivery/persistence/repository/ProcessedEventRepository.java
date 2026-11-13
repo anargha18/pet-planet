@@ -1,6 +1,6 @@
-package com.petcommerce.delivery.repository;
+package com.petcommerce.delivery.persistence.repository;
 
-import com.petcommerce.delivery.entity.ProcessedEvent;
+import com.petcommerce.delivery.persistence.entity.ProcessedEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.UUID;

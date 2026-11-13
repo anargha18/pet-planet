@@ -1,6 +1,6 @@
-package com.petcommerce.delivery.repository;
+package com.petcommerce.delivery.persistence.repository;
 
-import com.petcommerce.delivery.entity.DeliveryRecord;
+import com.petcommerce.delivery.domain.model.DeliveryRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
