@@ -4,8 +4,8 @@ Event-driven pet e-commerce platform built with Java 17, Spring Boot 3.5.5, Spri
 
 ## Architecture Highlights
 
-- **API Gateway (`gateway-service`, `:8089`)**: The only published application API entrypoint. It issues and validates RS256 JWTs, applies edge role checks, and routes requests to private backend services.
-- **User management (`user-service`, internal `:8088`)**: Owns account records, BCrypt password hashes, credential verification, user/profile CRUD, and soft deactivation. It does not issue or validate JWTs.
+- **API Gateway (`gateway-service`, `:8089`)**: The only published application API entrypoint. It validates RS256 JWTs, applies edge role checks, handles CORS, and routes requests to private backend services.
+- **User management (`user-service`, internal `:8088`)**: Owns account records, BCrypt password hashes, login/registration, and RS256 token issuance (the only service with the private key), plus user/profile CRUD and soft deactivation.
 - **Choreographed Checkout Saga with Compensating Rollbacks**:
   1. `order-service` (`:8081`) validates catalog availability, snapshots pet pricing, saves the order (`CREATED`), and publishes `OrderCreatedEvent` via its transactional outbox (`order-created-events`).
   2. `inventory-service` (`:8082`) atomically reserves all pets in the order using optimistic locking (`@Version`), synchronizes `pet-catalog-service` (`:8080`) via `inventory-status-events`, and emits `PetReservedEvent` (`pet-reserved-events`).
@@ -16,13 +16,18 @@ Event-driven pet e-commerce platform built with Java 17, Spring Boot 3.5.5, Spri
 
 ## Quickstart
 
+Prerequisites: Docker Desktop with **at least 4 GB of memory (6 GB recommended)**, plus `make`. JDK 17 is only needed to run tests or services outside Docker. Maven is not needed; the repo ships a Maven wrapper.
+
 ```sh
-cp .env.example .env
-docker compose up -d --build
-docker compose ps
+make up        # creates .env from .env.example if missing, builds, starts, and waits until every service is healthy
+make ps        # container status and health
+make logs s=order-service   # follow one service's logs
+make down      # stop (keeps data)
 ```
 
-When upgrading an existing local database from the previous email-hash-based order identity, old orders cannot be mapped reliably to user accounts. To start with clean development data, run `docker compose down -v` before starting the updated stack; this removes the local PostgreSQL and Kafka volumes.
+**First run after pulling these changes:** run `make reset` once. It deletes the local Postgres and Kafka volumes (all local data) and starts fresh. Earlier commits edited already-applied database migrations, so old volumes fail Flyway validation.
+
+Other commands: `make infra` (Postgres + Kafka only, to run services from your IDE), `make test` (all backend tests), `make frontend-check` (frontend build + folder-boundary check), `make help`.
 
 ### Seeded Accounts & Sample Catalog
 

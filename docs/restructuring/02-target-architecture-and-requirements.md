@@ -380,6 +380,23 @@ Deviations from the plan above, made deliberately:
   - Splitting `OrderRow` out of `OrdersPage.jsx` → Phase 5.
 - ArchUnit runs as plain JUnit `@Test` methods (core `archunit` artifact). The `archunit-junit5` engine was not discovered by Surefire here (0 tests ran), so it was replaced.
 
+**Phase 0b: done (2026-11-14).**
+- Token issuance moved to user-service (R-SEC-01): `POST /api/v1/auth/{register,login}` → `AuthService` + `security/token/TokenIssuer`. The gateway's `AuthController`, DTOs and signing code were deleted, and the gateway routes `/api/v1/auth/**` publicly.
+- One gateway `CorsWebFilter` from `FRONTEND_ORIGIN` (R-SEC-03); CORS removed from catalog, order and inventory.
+- user-service `V4` migration re-seeds the demo accounts with a verified hash (R-DB-02, user part), proven by `SeedAccountPasswordTest` (R-TEST-03). Gateway CORS, 401 and public-auth tests added (R-TEST-02).
+- Compose healthchecks plus `service_healthy` ordering (R-INF-03), memory caps sized for 4 GB (R-INF-04), `Makefile` (R-INF-05), `make infra` hybrid mode (R-INF-06), Postgres init README (R-INF-09).
+
+Verified on the running stack after `make reset` (all 13 containers healthy; about 3.1 GB memory, no OOM kills), with HTTP requests through the gateway carrying `Origin: http://localhost:5173`:
+- Login preflight allowed; both seeded accounts log in; a wrong password gets 401.
+- user-service tokens are accepted by the gateway, user-service and order-service; user vs admin rules are enforced (403/200); forged identity headers are ignored.
+- Registration returns 201 with a token; a duplicate email gets 409. The catalog lists 6 pets; the storefront serves.
+
+Not verified: an interactive click-through in a real browser UI (the CORS behavior was tested with browser-equivalent requests).
+
+Deviations:
+- `TokenIssuer` uses JJWT (the gateway's existing, verbatim signing code) instead of Spring's `JwtEncoder`, so the token format stays identical for the services that verify tokens today. Switching both sides belongs with R-SEC-02 (Phase 3).
+- The unused gateway→user-service `/internal/users/*` endpoints were removed.
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.
