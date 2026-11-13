@@ -9,7 +9,7 @@ Pet Planet consists of ten Spring Boot services (`gateway-service` plus nine dom
 | Component | Port | Responsibility and communication |
 |---|---:|---|
 | React storefront (`frontend`) | 5173 | Catalog browsing, species filtering, login/registration, browser-local cart, checkout, and order/shipment tracking (`/orders`). Calls `gateway-service` (`:8089`). |
-| API Gateway (`gateway-service`) | 8089 | Public application entrypoint; handles registration/login, RS256 JWT issuance and validation, edge role authorization, routing, and CORS. |
+| API Gateway (`gateway-service`) | 8089 | Public application entrypoint; RS256 JWT validation (public key only), edge role authorization, routing, and CORS. Login/registration pass through to user-service. |
 | Pet catalog (`pet-catalog-service`) | 8080 | Pet CRUD/search REST API; emits `PetCreatedEvent` (`pet-catalog-events`); consumes `inventory-status-events` to keep `availabilityStatus` (`AVAILABLE`, `RESERVED`, `SOLD`) synchronized. |
 | Order (`order-service`) | 8081 | Persists order and item snapshots; reads catalog over REST; emits `order-created-events`, `order-cancelled-events`, and `order-confirmed-events`; consumes reservation and payment result events. |
 | Inventory (`inventory-service`) | 8082 | Unique pet availability, atomic multi-pet reservation, 5-minute expiry scheduler, and sold-state tracking. Consumes `order-created-events`, `order-confirmed-events`, `order-cancelled-events`, `payment-failed-events`, and `pet-catalog-events`. Emits reservation outcomes and `inventory-status-events`. |
@@ -18,7 +18,7 @@ Pet Planet consists of ten Spring Boot services (`gateway-service` plus nine dom
 | Shipping (`shipping-service`) | 8085 | Consumes `order-confirmed-events`, creates shipment and tracking number with the order's `customerId`, emits `shipment-created-events`, and exposes lookup and manual delivered endpoints. |
 | Delivery tracking (`delivery-tracking-service`) | 8086 | Consumes `shipment-created-events`, creates `IN_TRANSIT` delivery record, emits `delivery-status-updated-events`, and supports `PUT /api/v1/deliveries/order/{orderId}/delivered`. |
 | Fulfillment (`fulfillment-service`) | 8087 | Consumes `delivery-status-updated-events`, creates or updates `FulfillmentRecord` (`SHIPPED`, `DELIVERED`, `ESCALATED`), and emits `fulfillment-updated-events`. |
-| User (`user-service`) | 8088 (internal) | User CRUD, BCrypt credential verification, profile/password management, and soft deactivation; reachable through an internal gateway credential, not a published host port. |
+| User (`user-service`) | 8088 (internal) | Login/registration with RS256 token issuance (sole holder of the private key), user CRUD, BCrypt credential verification, profile/password management, and soft deactivation; reachable through an internal gateway credential, not a published host port. |
 
 ## Mermaid system diagram
 

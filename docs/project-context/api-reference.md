@@ -4,16 +4,16 @@ Application HTTP APIs are exposed through **`gateway-service` (`http://localhost
 
 ## API Gateway (`gateway-service`, port 8089)
 
-The gateway handles `/api/v1/auth/**` and routes `/api/v1/users/**` to the internal `user-service:8088`, `/api/v1/pets/**` to `pet-catalog-service:8080`, `/api/v1/orders/**` to `order-service:8081`, `/api/v1/inventory/**` to `inventory-service:8082`, `/api/v1/payments/**` to `payment-service:8083`, `/api/v1/notifications/**` to `notification-service:8084`, `/api/v1/shipments/**` to `shipping-service:8085`, `/api/v1/deliveries/**` to `delivery-tracking-service:8086`, and `/api/v1/fulfillment/**` to `fulfillment-service:8087`.
+The gateway routes `/api/v1/auth/**` and `/api/v1/users/**` to the internal `user-service:8088`, `/api/v1/pets/**` to `pet-catalog-service:8080`, `/api/v1/orders/**` to `order-service:8081`, `/api/v1/inventory/**` to `inventory-service:8082`, `/api/v1/payments/**` to `payment-service:8083`, `/api/v1/notifications/**` to `notification-service:8084`, `/api/v1/shipments/**` to `shipping-service:8085`, `/api/v1/deliveries/**` to `delivery-tracking-service:8086`, and `/api/v1/fulfillment/**` to `fulfillment-service:8087`.
 
-All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. The gateway's `/auth/register` and `/auth/login` handlers are public. Catalog writes and inventory routes require `ADMIN`; order routes require `USER` or `ADMIN`; user management endpoints have the rules listed below. Customer-specific lists and tracking lookups are owner-scoped at the gateway; domain services retain relevant token and ownership checks as defense in depth.
+All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. `POST /api/v1/auth/register` and `POST /api/v1/auth/login` are public and served by user-service, which issues the token. Catalog writes and inventory routes require `ADMIN`; order routes require `USER` or `ADMIN`; user management endpoints have the rules listed below. Customer-specific lists and tracking lookups are owner-scoped at the gateway; domain services retain relevant token and ownership checks as defense in depth.
 
-## Authentication (`gateway-service`)
+## Authentication (`user-service`, via the gateway)
 
 | Method/path | Request and behavior | Response/status/access |
 |---|---|---|
 | `POST /api/v1/auth/register` | JSON: `email`, `password` (minimum 8 chars), `firstName`, `lastName`. Always creates a `USER`; public requests cannot select `ADMIN`. | `AuthResponse` (`token`, `tokenType`, integer `id`, `email`, `role`), `201 Created`. Public. |
-| `POST /api/v1/auth/login` | JSON: `email`, `password`. Gateway delegates credential verification to the internal user service and issues the JWT. | `AuthResponse`, `200 OK`; `401` for invalid credentials. Public. |
+| `POST /api/v1/auth/login` | JSON: `email`, `password` (both required). user-service verifies the BCrypt credentials and issues the RS256 JWT. | `AuthResponse`, `200 OK`; `401` for invalid credentials. Public. |
 
 ## User management (`user-service`, internal port 8088)
 

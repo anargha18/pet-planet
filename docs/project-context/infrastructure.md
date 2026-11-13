@@ -4,10 +4,15 @@
 
 `docker-compose.yml` runs PostgreSQL 16 (`:5432`), Apache Kafka 4.0.1 KRaft (`:9092`), ten Spring Boot containers on the `pet-planet` bridge network, and the React/Vite frontend (`:5173`). Only `gateway-service` (`:8089`) is published as an application API; backend service ports remain internal to the Docker network.
 
+- **Health and startup order:** every Spring service has a Compose healthcheck (`curl -fsS http://localhost:<port>/actuator/health`). `depends_on` waits for real dependencies to be healthy: Postgres and Kafka for every service; catalog for order; user, catalog, order and inventory for the gateway; the gateway for the frontend. `make up` runs `docker compose up -d --build --wait --wait-timeout 600`.
+- **Memory:** sized for a ~4 GB Docker Desktop VM. Each Spring service runs with `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=65 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k` and `mem_limit` `SERVICE_MEM_LIMIT` (default `384m`). Kafka is capped at 640 MB (heap 384 MB), Postgres at 256 MB, the frontend at 512 MB. Measured on 2026-11-14 with the stack idle after startup: about 3.1 GB in total, with no OOM kills. 6 GB of Docker memory is recommended.
+- **Make targets:** `up`, `down`, `reset` (deletes volumes), `infra` (Postgres + Kafka only, for running services from an IDE with their `application.yml` localhost defaults), `build`, `logs s=<service>`, `ps`, `test`, `frontend-check`.
+- **CORS origins:** `FRONTEND_ORIGIN` (comma-separated, default `http://localhost:5173,http://127.0.0.1:5173`) is read by the gateway's `CorsWebFilter`.
+
 ## Environment variables & RS256 keys
 
 - `.env.example` and `docker-compose.yml` configure the RS256 keypair (`JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEY`) alongside `JWT_ISSUER=pet-planet`, `JWT_AUDIENCE=pet-planet`, and `JWT_EXPIRATION_MS=3600000`.
-- Only `gateway-service` receives the private signing key. Services that retain defense-in-depth JWT verification receive the public key.
+- Only `user-service` receives the private signing key (it issues tokens). The gateway and the services that retain defense-in-depth JWT verification receive the public key.
 - `gateway-service` is configured with upstream URLs for all nine backend domain services. The user service additionally requires `USER_SERVICE_INTERNAL_TOKEN`, shared only with the gateway in local Compose.
 - The checked-in internal token fallback is development-only; set a randomly generated secret in `.env` for local deployments and configure mTLS for production service-to-service traffic.
 
