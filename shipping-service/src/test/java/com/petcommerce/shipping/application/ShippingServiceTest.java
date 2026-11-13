@@ -1,13 +1,14 @@
 package com.petcommerce.shipping.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.petcommerce.shipping.application.ShippingService;
 import com.petcommerce.shipping.domain.model.Shipment;
 import com.petcommerce.shipping.domain.model.ShipmentStatus;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.shipping.messaging.publisher.ShipmentEventPublisher;
+import com.petcommerce.shipping.persistence.repository.ProcessedEventRepository;
 import com.petcommerce.shipping.persistence.repository.ShipmentOutboxRepository;
 import com.petcommerce.shipping.persistence.repository.ShipmentRepository;
-import com.petcommerce.shipping.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.shipping.application.ShippingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,9 +54,7 @@ class ShippingServiceTest {
         shippingService = new ShippingService(
                 shipmentRepository,
                 processedEventRepository,
-                shipmentOutboxRepository,
-                kafkaTemplate,
-                objectMapper
+                new ShipmentEventPublisher(shipmentOutboxRepository, kafkaTemplate, objectMapper)
         );
     }
 
