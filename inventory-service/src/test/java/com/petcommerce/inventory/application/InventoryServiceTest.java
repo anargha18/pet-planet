@@ -1,14 +1,14 @@
-package com.petcommerce.inventory;
+package com.petcommerce.inventory.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.inventory.entity.InventoryStatus;
-import com.petcommerce.inventory.entity.PetInventory;
-import com.petcommerce.inventory.event.OrderConfirmedEvent;
-import com.petcommerce.inventory.event.OrderCreatedEvent;
-import com.petcommerce.inventory.repository.InventoryOutboxRepository;
-import com.petcommerce.inventory.repository.PetInventoryRepository;
-import com.petcommerce.inventory.repository.ProcessedEventRepository;
-import com.petcommerce.inventory.service.InventoryService;
+import com.petcommerce.inventory.domain.model.InventoryStatus;
+import com.petcommerce.inventory.domain.model.PetInventory;
+import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
+import com.petcommerce.inventory.persistence.repository.InventoryOutboxRepository;
+import com.petcommerce.inventory.persistence.repository.PetInventoryRepository;
+import com.petcommerce.inventory.persistence.repository.ProcessedEventRepository;
+import com.petcommerce.inventory.application.InventoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

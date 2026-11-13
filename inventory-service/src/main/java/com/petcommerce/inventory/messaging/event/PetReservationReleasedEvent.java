@@ -1,10 +1,9 @@
-package com.petcommerce.inventory.event;
+package com.petcommerce.inventory.messaging.event;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-public record PaymentFailedEvent(
+public record PetReservationReleasedEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
@@ -12,9 +11,7 @@ public record PaymentFailedEvent(
         Instant timestamp,
         UUID correlationId,
         Long orderId,
-        UUID paymentId,
-        BigDecimal amount,
-        String reason
+        UUID reservationId,
+        UUID petId
 ) {
 }
-

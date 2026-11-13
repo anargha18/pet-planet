@@ -1,11 +1,11 @@
-package com.petcommerce.inventory.consumer;
+package com.petcommerce.inventory.messaging.consumer;
 
-import com.petcommerce.inventory.event.OrderCancelledEvent;
-import com.petcommerce.inventory.event.OrderConfirmedEvent;
-import com.petcommerce.inventory.event.OrderCreatedEvent;
-import com.petcommerce.inventory.event.PaymentFailedEvent;
-import com.petcommerce.inventory.event.PetCatalogEvent;
-import com.petcommerce.inventory.service.InventoryService;
+import com.petcommerce.inventory.messaging.event.OrderCancelledEvent;
+import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
+import com.petcommerce.inventory.messaging.event.PaymentFailedEvent;
+import com.petcommerce.inventory.messaging.event.PetCatalogEvent;
+import com.petcommerce.inventory.application.InventoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;

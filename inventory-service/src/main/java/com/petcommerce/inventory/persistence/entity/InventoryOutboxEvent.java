@@ -1,4 +1,4 @@
-package com.petcommerce.inventory.entity;
+package com.petcommerce.inventory.persistence.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

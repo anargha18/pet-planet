@@ -1,10 +1,9 @@
-package com.petcommerce.inventory.event;
+package com.petcommerce.inventory.messaging.event;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
-public record OrderCancelledEvent(
+public record PetReservationFailedEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
@@ -12,8 +11,7 @@ public record OrderCancelledEvent(
         Instant timestamp,
         UUID correlationId,
         Long orderId,
-        Long customerId,
-        List<UUID> petIds
+        UUID petId,
+        String reason
 ) {
 }
-

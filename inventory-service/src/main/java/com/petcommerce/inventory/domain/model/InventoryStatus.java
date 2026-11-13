@@ -1,4 +1,4 @@
-package com.petcommerce.inventory.entity;
+package com.petcommerce.inventory.domain.model;
 
 public enum InventoryStatus {
     AVAILABLE,
