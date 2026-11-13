@@ -235,6 +235,13 @@ public class InventoryService {
         }
     }
 
+    /** Current inventory state; a pet with no inventory row is reported as AVAILABLE (existing behavior). */
+    @Transactional(readOnly = true)
+    public PetInventory getPetStatus(UUID petId) {
+        return petInventoryRepository.findByPetId(petId)
+                .orElseGet(() -> new PetInventory(petId));
+    }
+
     @Transactional
     public PetInventory reservePet(UUID petId, UUID reservationId) {
         PetInventory inventory = petInventoryRepository.findByPetId(petId)
