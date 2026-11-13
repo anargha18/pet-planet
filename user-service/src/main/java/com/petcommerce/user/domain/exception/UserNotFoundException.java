@@ -1,4 +1,4 @@
-package com.petcommerce.user.exception;
+package com.petcommerce.user.domain.exception;
 
 public class UserNotFoundException extends RuntimeException {
     public UserNotFoundException(Integer id) {

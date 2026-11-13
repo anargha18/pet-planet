@@ -1,10 +1,10 @@
-package com.petcommerce.user.controller;
+package com.petcommerce.user.api.controller;
 
-import com.petcommerce.user.dto.LoginRequest;
-import com.petcommerce.user.dto.RegisterRequest;
-import com.petcommerce.user.dto.UserResponse;
-import com.petcommerce.user.entity.User;
-import com.petcommerce.user.service.UserService;
+import com.petcommerce.user.api.dto.LoginRequest;
+import com.petcommerce.user.api.dto.RegisterRequest;
+import com.petcommerce.user.api.dto.UserResponse;
+import com.petcommerce.user.domain.model.User;
+import com.petcommerce.user.application.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;

@@ -1,11 +1,11 @@
-package com.petcommerce.user.controller;
+package com.petcommerce.user.api.controller;
 
-import com.petcommerce.user.dto.ChangePasswordRequest;
-import com.petcommerce.user.dto.CreateUserRequest;
-import com.petcommerce.user.dto.UpdateProfileRequest;
-import com.petcommerce.user.dto.UpdateUserRequest;
-import com.petcommerce.user.dto.UserResponse;
-import com.petcommerce.user.service.UserService;
+import com.petcommerce.user.api.dto.ChangePasswordRequest;
+import com.petcommerce.user.api.dto.CreateUserRequest;
+import com.petcommerce.user.api.dto.UpdateProfileRequest;
+import com.petcommerce.user.api.dto.UpdateUserRequest;
+import com.petcommerce.user.api.dto.UserResponse;
+import com.petcommerce.user.application.UserService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

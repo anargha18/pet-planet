@@ -1,4 +1,8 @@
-package com.petcommerce.user.exception;
+package com.petcommerce.user.api.error;
+
+import com.petcommerce.user.domain.exception.LastAdminException;
+import com.petcommerce.user.domain.exception.UserAlreadyExistsException;
+import com.petcommerce.user.domain.exception.UserNotFoundException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

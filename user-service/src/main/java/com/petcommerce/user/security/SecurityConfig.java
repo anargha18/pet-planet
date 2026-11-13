@@ -1,4 +1,4 @@
-package com.petcommerce.user.config;
+package com.petcommerce.user.security;
 
 import com.petcommerce.user.security.InternalServiceKeyFilter;
 import org.springframework.context.annotation.Bean;

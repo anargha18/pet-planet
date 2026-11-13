@@ -1,6 +1,6 @@
-package com.petcommerce.user.dto;
+package com.petcommerce.user.api.dto;
 
-import com.petcommerce.user.entity.Role;
+import com.petcommerce.user.domain.model.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
