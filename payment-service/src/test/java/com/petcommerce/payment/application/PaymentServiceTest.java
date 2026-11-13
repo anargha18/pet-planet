@@ -1,13 +1,14 @@
 package com.petcommerce.payment.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.petcommerce.payment.application.PaymentService;
 import com.petcommerce.payment.domain.model.Payment;
 import com.petcommerce.payment.domain.model.PaymentStatus;
 import com.petcommerce.payment.messaging.event.PetReservedEvent;
+import com.petcommerce.payment.messaging.publisher.PaymentEventPublisher;
 import com.petcommerce.payment.persistence.repository.PaymentOutboxRepository;
 import com.petcommerce.payment.persistence.repository.PaymentRepository;
 import com.petcommerce.payment.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.payment.application.PaymentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,9 +52,7 @@ class PaymentServiceTest {
         paymentService = new PaymentService(
                 paymentRepository,
                 processedEventRepository,
-                paymentOutboxRepository,
-                kafkaTemplate,
-                new ObjectMapper().findAndRegisterModules(),
+                new PaymentEventPublisher(paymentOutboxRepository, kafkaTemplate, new ObjectMapper().findAndRegisterModules()),
                 environment
         );
     }
@@ -119,9 +118,7 @@ class PaymentServiceTest {
         paymentService = new PaymentService(
                 paymentRepository,
                 processedEventRepository,
-                paymentOutboxRepository,
-                kafkaTemplate,
-                new ObjectMapper().findAndRegisterModules(),
+                new PaymentEventPublisher(paymentOutboxRepository, kafkaTemplate, new ObjectMapper().findAndRegisterModules()),
                 environment
         );
 

@@ -1,31 +1,23 @@
 package com.petcommerce.payment.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.petcommerce.payment.domain.model.Payment;
-import com.petcommerce.payment.persistence.entity.PaymentOutboxEvent;
 import com.petcommerce.payment.domain.model.PaymentStatus;
-import com.petcommerce.payment.persistence.entity.ProcessedEvent;
 import com.petcommerce.payment.messaging.event.PaymentFailedEvent;
 import com.petcommerce.payment.messaging.event.PaymentSucceededEvent;
 import com.petcommerce.payment.messaging.event.PetReservedEvent;
-import com.petcommerce.payment.persistence.repository.PaymentOutboxRepository;
+import com.petcommerce.payment.messaging.publisher.PaymentEventPublisher;
+import com.petcommerce.payment.persistence.entity.ProcessedEvent;
 import com.petcommerce.payment.persistence.repository.PaymentRepository;
 import com.petcommerce.payment.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,24 +30,17 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final ProcessedEventRepository processedEventRepository;
-    private final PaymentOutboxRepository paymentOutboxRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final PaymentEventPublisher eventPublisher;
     private final String simulationResult;
 
     public PaymentService(
             PaymentRepository paymentRepository,
             ProcessedEventRepository processedEventRepository,
-            PaymentOutboxRepository paymentOutboxRepository,
-            KafkaTemplate<String, Object> kafkaTemplate,
-            ObjectMapper objectMapper,
+            PaymentEventPublisher eventPublisher,
             Environment environment) {
         this.paymentRepository = paymentRepository;
         this.processedEventRepository = processedEventRepository;
-        this.paymentOutboxRepository = paymentOutboxRepository;
-        this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
-        this.objectMapper.findAndRegisterModules();
+        this.eventPublisher = eventPublisher;
         this.simulationResult = environment.getProperty("payment.simulation-result", "SUCCESS").trim().toUpperCase();
     }
 
@@ -113,7 +98,7 @@ public class PaymentService {
                     payment.getAmount()
             );
             log.info("Payment succeeded for order {} with payment {} amount {}", event.orderId(), payment.getPaymentId(), payment.getAmount());
-            publishAfterCommit(PAYMENT_SUCCEEDED_TOPIC, event.orderId().toString(), successEvent, payment.getPaymentId(), event.orderId());
+            eventPublisher.publish(PAYMENT_SUCCEEDED_TOPIC, event.orderId().toString(), successEvent, payment.getPaymentId(), event.orderId());
             return payment;
         }
 
@@ -133,72 +118,8 @@ public class PaymentService {
                 "PAYMENT_DECLINED"
         );
         log.warn("Payment failed for order {} with payment {}", event.orderId(), payment.getPaymentId());
-        publishAfterCommit(PAYMENT_FAILED_TOPIC, event.orderId().toString(), failedEvent, payment.getPaymentId(), event.orderId());
+        eventPublisher.publish(PAYMENT_FAILED_TOPIC, event.orderId().toString(), failedEvent, payment.getPaymentId(), event.orderId());
         return payment;
     }
 
-    private void publishAfterCommit(String topic, String key, Object event, UUID paymentId, Long orderId) {
-        PaymentOutboxEvent outbox = new PaymentOutboxEvent(
-                UUID.randomUUID(),
-                topic,
-                event.getClass().getSimpleName(),
-                orderId,
-                paymentId,
-                serializePayload(event),
-                Instant.now()
-        );
-        paymentOutboxRepository.save(outbox);
-
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    sendAndMarkPublished(outbox, key, event);
-                }
-            });
-            return;
-        }
-        sendAndMarkPublished(outbox, key, event);
-    }
-
-    private void sendAndMarkPublished(PaymentOutboxEvent outbox, String key, Object event) {
-        try {
-            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
-            if (future != null) {
-                future.whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        outbox.setPublishedAt(Instant.now());
-                        paymentOutboxRepository.save(outbox);
-                    }
-                });
-            }
-        } catch (Exception ex) {
-            log.warn("Deferred payment outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
-        }
-    }
-
-    @Scheduled(fixedDelayString = "${payment.outbox-poll-delay-ms:5000}")
-    @Transactional
-    public void relayOutboxEvents() {
-        List<PaymentOutboxEvent> pending = paymentOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
-        for (PaymentOutboxEvent outbox : pending) {
-            try {
-                Object payloadObj = objectMapper.readTree(outbox.getPayload());
-                String key = outbox.getOrderId() != null ? outbox.getOrderId().toString() : outbox.getEventId().toString();
-                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
-                outbox.setPublishedAt(Instant.now());
-                paymentOutboxRepository.save(outbox);
-            } catch (Exception ex) {
-                log.warn("Failed to relay payment outbox event {}: {}", outbox.getEventId(), ex.getMessage());
-            }
-        }
-    }
-
-    private String serializePayload(Object event) {
-        try {
-            return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Unable to serialize payment event", ex);
-        }
-    }
 }
