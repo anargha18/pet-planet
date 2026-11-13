@@ -1,7 +1,7 @@
-package com.petcommerce.catalog.consumer;
+package com.petcommerce.catalog.messaging.consumer;
 
-import com.petcommerce.catalog.event.InventoryStatusChangedEvent;
-import com.petcommerce.catalog.service.PetService;
+import com.petcommerce.catalog.messaging.event.InventoryStatusChangedEvent;
+import com.petcommerce.catalog.application.PetService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;

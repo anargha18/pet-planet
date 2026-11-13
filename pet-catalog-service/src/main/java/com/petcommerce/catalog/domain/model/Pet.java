@@ -1,4 +1,4 @@
-package com.petcommerce.catalog.entity;
+package com.petcommerce.catalog.domain.model;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

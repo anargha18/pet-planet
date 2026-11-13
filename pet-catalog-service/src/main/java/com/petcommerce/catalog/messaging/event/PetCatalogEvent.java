@@ -1,4 +1,4 @@
-package com.petcommerce.catalog.event;
+package com.petcommerce.catalog.messaging.event;
 
 import java.time.Instant;
 import java.util.UUID;

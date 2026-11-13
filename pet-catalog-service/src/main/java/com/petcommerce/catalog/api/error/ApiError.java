@@ -1,4 +1,4 @@
-package com.petcommerce.catalog.exception;
+package com.petcommerce.catalog.api.error;
 
 import java.time.Instant;
 import java.util.List;

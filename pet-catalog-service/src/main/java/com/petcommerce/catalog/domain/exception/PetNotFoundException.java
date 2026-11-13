@@ -1,4 +1,4 @@
-package com.petcommerce.catalog.exception;
+package com.petcommerce.catalog.domain.exception;
 
 import java.util.UUID;
 

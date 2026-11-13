@@ -1,6 +1,6 @@
-package com.petcommerce.catalog.repository;
+package com.petcommerce.catalog.persistence.repository;
 
-import com.petcommerce.catalog.entity.Pet;
+import com.petcommerce.catalog.domain.model.Pet;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 

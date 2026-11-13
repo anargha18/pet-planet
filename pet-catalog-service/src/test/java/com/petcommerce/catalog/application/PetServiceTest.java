@@ -1,12 +1,12 @@
-package com.petcommerce.catalog.service;
+package com.petcommerce.catalog.application;
 
-import com.petcommerce.catalog.dto.CreatePetRequest;
-import com.petcommerce.catalog.dto.PetResponse;
-import com.petcommerce.catalog.entity.AvailabilityStatus;
-import com.petcommerce.catalog.entity.Gender;
-import com.petcommerce.catalog.entity.Pet;
-import com.petcommerce.catalog.entity.Species;
-import com.petcommerce.catalog.repository.PetRepository;
+import com.petcommerce.catalog.api.dto.CreatePetRequest;
+import com.petcommerce.catalog.api.dto.PetResponse;
+import com.petcommerce.catalog.domain.model.AvailabilityStatus;
+import com.petcommerce.catalog.domain.model.Gender;
+import com.petcommerce.catalog.domain.model.Pet;
+import com.petcommerce.catalog.domain.model.Species;
+import com.petcommerce.catalog.persistence.repository.PetRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
