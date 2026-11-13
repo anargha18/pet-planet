@@ -1,13 +1,13 @@
-package com.petcommerce.payment;
+package com.petcommerce.payment.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.payment.entity.Payment;
-import com.petcommerce.payment.entity.PaymentStatus;
-import com.petcommerce.payment.event.PetReservedEvent;
-import com.petcommerce.payment.repository.PaymentOutboxRepository;
-import com.petcommerce.payment.repository.PaymentRepository;
-import com.petcommerce.payment.repository.ProcessedEventRepository;
-import com.petcommerce.payment.service.PaymentService;
+import com.petcommerce.payment.domain.model.Payment;
+import com.petcommerce.payment.domain.model.PaymentStatus;
+import com.petcommerce.payment.messaging.event.PetReservedEvent;
+import com.petcommerce.payment.persistence.repository.PaymentOutboxRepository;
+import com.petcommerce.payment.persistence.repository.PaymentRepository;
+import com.petcommerce.payment.persistence.repository.ProcessedEventRepository;
+import com.petcommerce.payment.application.PaymentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

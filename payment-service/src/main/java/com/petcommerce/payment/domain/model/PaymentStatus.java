@@ -1,4 +1,4 @@
-package com.petcommerce.payment.entity;
+package com.petcommerce.payment.domain.model;
 
 public enum PaymentStatus {
     PENDING,
