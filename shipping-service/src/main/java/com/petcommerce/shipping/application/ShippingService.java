@@ -1,25 +1,18 @@
 package com.petcommerce.shipping.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.shipping.persistence.entity.ProcessedEvent;
 import com.petcommerce.shipping.domain.model.Shipment;
-import com.petcommerce.shipping.persistence.entity.ShipmentOutboxEvent;
 import com.petcommerce.shipping.domain.model.ShipmentStatus;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.shipping.messaging.event.ShipmentCreatedEvent;
+import com.petcommerce.shipping.messaging.publisher.ShipmentEventPublisher;
+import com.petcommerce.shipping.persistence.entity.ProcessedEvent;
 import com.petcommerce.shipping.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.shipping.persistence.repository.ShipmentOutboxRepository;
 import com.petcommerce.shipping.persistence.repository.ShipmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,22 +27,15 @@ public class ShippingService {
 
     private final ShipmentRepository shipmentRepository;
     private final ProcessedEventRepository processedEventRepository;
-    private final ShipmentOutboxRepository shipmentOutboxRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final ShipmentEventPublisher eventPublisher;
 
     public ShippingService(
             ShipmentRepository shipmentRepository,
             ProcessedEventRepository processedEventRepository,
-            ShipmentOutboxRepository shipmentOutboxRepository,
-            KafkaTemplate<String, Object> kafkaTemplate,
-            ObjectMapper objectMapper) {
+            ShipmentEventPublisher eventPublisher) {
         this.shipmentRepository = shipmentRepository;
         this.processedEventRepository = processedEventRepository;
-        this.shipmentOutboxRepository = shipmentOutboxRepository;
-        this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
-        this.objectMapper.findAndRegisterModules();
+        this.eventPublisher = eventPublisher;
     }
 
     public Optional<Shipment> getShipmentByOrderId(Long orderId) {
@@ -113,74 +99,10 @@ public class ShippingService {
                 shipment.getStatus().name()
         );
 
-        publishAfterCommit(SHIPMENT_CREATED_TOPIC, event.orderId().toString(), shipmentCreatedEvent, shipment.getId(), event.orderId(), event.correlationId());
+        eventPublisher.publish(SHIPMENT_CREATED_TOPIC, event.orderId().toString(), shipmentCreatedEvent, shipment.getId(), event.orderId(), event.correlationId());
 
         log.info("Shipment created for order {} (customer {}) with tracking {}", event.orderId(), customerId, shipment.getTrackingNumber());
         return shipment;
     }
 
-    private void publishAfterCommit(String topic, String key, Object event, UUID shipmentId, Long orderId, UUID correlationId) {
-        ShipmentOutboxEvent outbox = new ShipmentOutboxEvent(
-                UUID.randomUUID(),
-                topic,
-                event.getClass().getSimpleName(),
-                orderId,
-                correlationId,
-                serializePayload(event),
-                Instant.now()
-        );
-        shipmentOutboxRepository.save(outbox);
-
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    sendAndMarkPublished(outbox, key, event);
-                }
-            });
-            return;
-        }
-        sendAndMarkPublished(outbox, key, event);
-    }
-
-    private void sendAndMarkPublished(ShipmentOutboxEvent outbox, String key, Object event) {
-        try {
-            var future = kafkaTemplate.send(outbox.getTopic(), key, event);
-            if (future != null) {
-                future.whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        outbox.setPublishedAt(Instant.now());
-                        shipmentOutboxRepository.save(outbox);
-                    }
-                });
-            }
-        } catch (Exception ex) {
-            log.warn("Deferred shipment outbox event {} to scheduled poller: {}", outbox.getEventId(), ex.getMessage());
-        }
-    }
-
-    @Scheduled(fixedDelayString = "${shipping.outbox-poll-delay-ms:5000}")
-    @Transactional
-    public void relayOutboxEvents() {
-        List<ShipmentOutboxEvent> pending = shipmentOutboxRepository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc();
-        for (ShipmentOutboxEvent outbox : pending) {
-            try {
-                Object payloadObj = objectMapper.readTree(outbox.getPayload());
-                String key = outbox.getOrderId() != null ? outbox.getOrderId().toString() : outbox.getEventId().toString();
-                kafkaTemplate.send(outbox.getTopic(), key, payloadObj);
-                outbox.setPublishedAt(Instant.now());
-                shipmentOutboxRepository.save(outbox);
-            } catch (Exception ex) {
-                log.warn("Failed to relay shipping outbox event {}: {}", outbox.getEventId(), ex.getMessage());
-            }
-        }
-    }
-
-    private String serializePayload(Object event) {
-        try {
-            return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Unable to serialize shipping event", ex);
-        }
-    }
 }
