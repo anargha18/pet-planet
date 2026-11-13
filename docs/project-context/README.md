@@ -7,6 +7,7 @@ Pet Planet is an event-driven pet e-commerce platform comprising ten Java 17 / S
 | File | Consult when working on |
 |---|---|
 | [Architecture](./architecture.md) | Service boundaries, gateway routing, event workflows, saga compensation, outbox relay |
+| [Code structure](./code-structure.md) | Repository layout, per-service package layout, frontend feature folders, and the enforced boundary rules |
 | [Backend overview](./backend/README.md) | Java service inventory, shared conventions, and links to service-specific notes |
 | [Frontend](./frontend.md) | React routes, state, API calls, pagination, species filtering, and order tracking UI |
 | [Database](./database.md) | Flyway schema, `TIMESTAMPTZ` standardization, seed data migrations, ORM mappings |
