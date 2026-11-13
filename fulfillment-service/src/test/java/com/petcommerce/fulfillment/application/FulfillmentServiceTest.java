@@ -1,13 +1,13 @@
-package com.petcommerce.fulfillment;
+package com.petcommerce.fulfillment.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.fulfillment.entity.FulfillmentRecord;
-import com.petcommerce.fulfillment.entity.FulfillmentStatus;
-import com.petcommerce.fulfillment.event.DeliveryStatusUpdatedEvent;
-import com.petcommerce.fulfillment.repository.FulfillmentOutboxRepository;
-import com.petcommerce.fulfillment.repository.FulfillmentRecordRepository;
-import com.petcommerce.fulfillment.repository.ProcessedEventRepository;
-import com.petcommerce.fulfillment.service.FulfillmentService;
+import com.petcommerce.fulfillment.domain.model.FulfillmentRecord;
+import com.petcommerce.fulfillment.domain.model.FulfillmentStatus;
+import com.petcommerce.fulfillment.messaging.event.DeliveryStatusUpdatedEvent;
+import com.petcommerce.fulfillment.persistence.repository.FulfillmentOutboxRepository;
+import com.petcommerce.fulfillment.persistence.repository.FulfillmentRecordRepository;
+import com.petcommerce.fulfillment.persistence.repository.ProcessedEventRepository;
+import com.petcommerce.fulfillment.application.FulfillmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
