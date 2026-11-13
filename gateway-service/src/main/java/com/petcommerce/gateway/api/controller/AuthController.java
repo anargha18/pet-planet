@@ -1,9 +1,9 @@
-package com.petcommerce.gateway.controller;
+package com.petcommerce.gateway.api.controller;
 
-import com.petcommerce.gateway.dto.AuthResponse;
-import com.petcommerce.gateway.dto.LoginRequest;
-import com.petcommerce.gateway.dto.RegisterRequest;
-import com.petcommerce.gateway.dto.UserResponse;
+import com.petcommerce.gateway.api.dto.AuthResponse;
+import com.petcommerce.gateway.api.dto.LoginRequest;
+import com.petcommerce.gateway.api.dto.RegisterRequest;
+import com.petcommerce.gateway.api.dto.UserResponse;
 import com.petcommerce.gateway.security.JwtService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;

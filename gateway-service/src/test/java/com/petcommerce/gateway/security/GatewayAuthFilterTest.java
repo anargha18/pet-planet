@@ -1,6 +1,6 @@
 package com.petcommerce.gateway.security;
 
-import com.petcommerce.gateway.dto.UserResponse;
+import com.petcommerce.gateway.api.dto.UserResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
