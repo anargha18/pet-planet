@@ -1,8 +1,8 @@
 package com.petcommerce.order.client;
 
-import com.petcommerce.order.exception.PetCatalogUnavailableException;
-import com.petcommerce.order.exception.PetNotFoundException;
-import com.petcommerce.order.exception.PetUnavailableException;
+import com.petcommerce.order.domain.exception.PetCatalogUnavailableException;
+import com.petcommerce.order.domain.exception.PetNotFoundException;
+import com.petcommerce.order.domain.exception.PetUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
