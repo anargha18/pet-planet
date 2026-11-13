@@ -2,15 +2,16 @@ package com.petcommerce.user.application;
 
 import com.petcommerce.user.api.dto.ChangePasswordRequest;
 import com.petcommerce.user.api.dto.CreateUserRequest;
-import com.petcommerce.user.api.dto.RegisterRequest;
 import com.petcommerce.user.api.dto.UpdateProfileRequest;
 import com.petcommerce.user.api.dto.UpdateUserRequest;
 import com.petcommerce.user.api.dto.UserResponse;
-import com.petcommerce.user.domain.model.Role;
-import com.petcommerce.user.domain.model.User;
+import com.petcommerce.user.api.mapper.UserMapper;
 import com.petcommerce.user.domain.exception.LastAdminException;
 import com.petcommerce.user.domain.exception.UserAlreadyExistsException;
 import com.petcommerce.user.domain.exception.UserNotFoundException;
+import com.petcommerce.user.domain.model.Role;
+import com.petcommerce.user.domain.model.User;
+import com.petcommerce.user.domain.policy.EmailPolicy;
 import com.petcommerce.user.persistence.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,7 +20,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Locale;
 
 @Service
 public class UserService {
@@ -33,30 +33,13 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse register(RegisterRequest request) {
-        return createUser(request.email(), request.password(), request.firstName(), request.lastName(), Role.USER);
-    }
-
-    @Transactional
     public UserResponse create(CreateUserRequest request) {
-        return createUser(request.email(), request.password(), request.firstName(), request.lastName(), request.role());
-    }
-
-    @Transactional(readOnly = true)
-    public User authenticate(String email, String password) {
-        User user = userRepository.findByEmailIgnoreCase(normalizeEmail(email))
-                .filter(User::isActive)
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
-
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new BadCredentialsException("Invalid credentials");
-        }
-        return user;
+        return createAccount(request.email(), request.password(), request.firstName(), request.lastName(), request.role());
     }
 
     @Transactional(readOnly = true)
     public UserResponse findById(Integer id) {
-        return toResponse(userRepository.findById(id)
+        return UserMapper.toResponse(userRepository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id)));
     }
 
@@ -65,12 +48,12 @@ public class UserService {
         User user = userRepository.findById(id)
                 .filter(User::isActive)
                 .orElseThrow(() -> new UserNotFoundException(id));
-        return toResponse(user);
+        return UserMapper.toResponse(user);
     }
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
-        return userRepository.findAll(pageable).map(this::toResponse);
+        return userRepository.findAll(pageable).map(UserMapper::toResponse);
     }
 
     @Transactional
@@ -81,20 +64,20 @@ public class UserService {
             throw new LastAdminException();
         }
         if (request.email() != null) {
-            userRepository.findByEmailIgnoreCase(normalizeEmail(request.email()))
+            userRepository.findByEmailIgnoreCase(EmailPolicy.normalize(request.email()))
                     .filter(existing -> !existing.getId().equals(id))
                     .ifPresent(existing -> {
                         throw new UserAlreadyExistsException();
                     });
         }
         user.updateProfile(
-                request.email() == null ? null : normalizeEmail(request.email()),
+                request.email() == null ? null : EmailPolicy.normalize(request.email()),
                 request.firstName() == null ? null : request.firstName().trim(),
                 request.lastName() == null ? null : request.lastName().trim(),
                 request.role(),
                 request.active()
         );
-        return toResponse(userRepository.save(user));
+        return UserMapper.toResponse(userRepository.save(user));
     }
 
     @Transactional
@@ -103,13 +86,13 @@ public class UserService {
                 .filter(User::isActive)
                 .orElseThrow(() -> new UserNotFoundException(id));
         user.updateProfile(
-                normalizeEmail(request.email()),
+                EmailPolicy.normalize(request.email()),
                 request.firstName().trim(),
                 request.lastName().trim(),
                 null,
                 null
         );
-        return toResponse(userRepository.save(user));
+        return UserMapper.toResponse(userRepository.save(user));
     }
 
     @Transactional
@@ -135,8 +118,9 @@ public class UserService {
         userRepository.save(user);
     }
 
-    private UserResponse createUser(String email, String password, String firstName, String lastName, Role role) {
-        String normalizedEmail = normalizeEmail(email);
+    /** Creates an account with the given role; used by admin creation and by self-registration. */
+    public UserResponse createAccount(String email, String password, String firstName, String lastName, Role role) {
+        String normalizedEmail = EmailPolicy.normalize(email);
         if (userRepository.findByEmailIgnoreCase(normalizedEmail).isPresent()) {
             throw new UserAlreadyExistsException();
         }
@@ -147,11 +131,7 @@ public class UserService {
                 lastName.trim(),
                 role
         );
-        return toResponse(userRepository.save(user));
-    }
-
-    private String normalizeEmail(String email) {
-        return email.trim().toLowerCase(Locale.ROOT);
+        return UserMapper.toResponse(userRepository.save(user));
     }
 
     private boolean isLastAdminBeingRemoved(User user, Role nextRole, Boolean nextActive) {
@@ -161,18 +141,5 @@ public class UserService {
                 && user.getRole() == Role.ADMIN
                 && (demoted || deactivated)
                 && userRepository.countByRoleAndActiveTrue(Role.ADMIN) <= 1;
-    }
-
-    private UserResponse toResponse(User user) {
-        return new UserResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getRole().name(),
-                user.isActive(),
-                user.getCreatedAt(),
-                user.getUpdatedAt()
-        );
     }
 }

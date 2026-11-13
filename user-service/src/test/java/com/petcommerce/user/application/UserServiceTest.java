@@ -1,9 +1,8 @@
 package com.petcommerce.user.application;
 
-import com.petcommerce.user.api.dto.RegisterRequest;
+import com.petcommerce.user.domain.exception.LastAdminException;
 import com.petcommerce.user.domain.model.Role;
 import com.petcommerce.user.domain.model.User;
-import com.petcommerce.user.domain.exception.LastAdminException;
 import com.petcommerce.user.persistence.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,21 +31,6 @@ class UserServiceTest {
 
     @InjectMocks
     private UserService userService;
-
-    @Test
-    void registrationAlwaysCreatesRegularUser() {
-        when(userRepository.findByEmailIgnoreCase("person@example.com")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("password123")).thenReturn("encoded");
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        var response = userService.register(new RegisterRequest(
-                " Person@Example.com ", "password123", "Person", "User"
-        ));
-
-        assertEquals("person@example.com", response.email());
-        assertEquals("USER", response.role());
-        verify(passwordEncoder).encode("password123");
-    }
 
     @Test
     void lastActiveAdminCannotBeDeactivated() {

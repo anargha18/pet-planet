@@ -3,8 +3,7 @@ package com.petcommerce.user.api.controller;
 import com.petcommerce.user.api.dto.LoginRequest;
 import com.petcommerce.user.api.dto.RegisterRequest;
 import com.petcommerce.user.api.dto.UserResponse;
-import com.petcommerce.user.domain.model.User;
-import com.petcommerce.user.application.UserService;
+import com.petcommerce.user.application.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -13,30 +12,20 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/internal/users")
 public class InternalUserController {
 
-    private final UserService userService;
+    private final AuthService authService;
 
-    public InternalUserController(UserService userService) {
-        this.userService = userService;
+    public InternalUserController(AuthService authService) {
+        this.authService = authService;
     }
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse register(@Valid @RequestBody RegisterRequest request) {
-        return userService.register(request);
+        return authService.register(request);
     }
 
     @PostMapping("/authenticate")
     public UserResponse authenticate(@Valid @RequestBody LoginRequest request) {
-        User user = userService.authenticate(request.email(), request.password());
-        return new UserResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getRole().name(),
-                user.isActive(),
-                user.getCreatedAt(),
-                user.getUpdatedAt()
-        );
+        return authService.authenticate(request.email(), request.password());
     }
 }
