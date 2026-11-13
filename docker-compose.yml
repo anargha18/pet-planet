@@ -1,8 +1,35 @@
+# Pet Planet local stack. Start with `make up` (or `docker compose up -d --build`); see README.
+#
+# Memory: sized for a ~4 GB Docker Desktop VM (10 JVMs + Kafka + Postgres + Vite). 6–8 GB is more comfortable.
+# Each Spring service is capped by SERVICE_MEM_LIMIT and uses a small-footprint JVM configuration.
+
+x-java-env: &java-env
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=65 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k}
+
+x-java-service: &java-service
+  restart: unless-stopped
+  mem_limit: ${SERVICE_MEM_LIMIT:-384m}
+  networks:
+    - pet-planet
+
+x-health-timing: &health-timing
+  interval: 10s
+  timeout: 5s
+  retries: 30
+  start_period: 40s
+
+x-infra-ready: &infra-ready
+  postgres:
+    condition: service_healthy
+  kafka:
+    condition: service_healthy
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: pet-planet-postgres
     restart: unless-stopped
+    mem_limit: 256m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-petplanet_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
@@ -47,252 +74,15 @@ services:
     networks:
       - pet-planet
 
-  pet-catalog-service:
-    build:
-      context: ./pet-catalog-service
-    container_name: pet-planet-catalog
-    restart: unless-stopped
-    environment:
-      SERVER_PORT: 8080
-      CATALOG_DATABASE_URL: jdbc:postgresql://postgres:5432/${CATALOG_DATABASE_NAME:-petplanet_catalog}
-      CATALOG_DATABASE_USERNAME: ${CATALOG_DATABASE_USERNAME:-petplanet_catalog}
-      CATALOG_DATABASE_PASSWORD: ${CATALOG_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  order-service:
-    build:
-      context: ./order-service
-    container_name: pet-planet-order
-    restart: unless-stopped
-    environment:
-      ORDER_SERVICE_PORT: 8081
-      ORDER_DATABASE_URL: jdbc:postgresql://postgres:5432/${ORDER_DATABASE_NAME:-petplanet_order}
-      ORDER_DATABASE_USERNAME: ${ORDER_DATABASE_USERNAME:-petplanet_order}
-      ORDER_DATABASE_PASSWORD: ${ORDER_DATABASE_PASSWORD:-admin123}
-      PET_CATALOG_URL: http://pet-catalog-service:8080
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      pet-catalog-service:
-        condition: service_started
-    networks:
-      - pet-planet
-
-  inventory-service:
-    build:
-      context: ./inventory-service
-    container_name: pet-planet-inventory
-    restart: unless-stopped
-    environment:
-      INVENTORY_SERVICE_PORT: 8082
-      INVENTORY_DATABASE_URL: jdbc:postgresql://postgres:5432/${INVENTORY_DATABASE_NAME:-petplanet_inventory}
-      INVENTORY_DATABASE_USERNAME: ${INVENTORY_DATABASE_USERNAME:-petplanet_inventory}
-      INVENTORY_DATABASE_PASSWORD: ${INVENTORY_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  payment-service:
-    build:
-      context: ./payment-service
-    container_name: pet-planet-payment
-    restart: unless-stopped
-    environment:
-      PAYMENT_SERVICE_PORT: 8083
-      PAYMENT_DATABASE_URL: jdbc:postgresql://postgres:5432/${PAYMENT_DATABASE_NAME:-petplanet_payment}
-      PAYMENT_DATABASE_USERNAME: ${PAYMENT_DATABASE_USERNAME:-petplanet_payment}
-      PAYMENT_DATABASE_PASSWORD: ${PAYMENT_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      PAYMENT_SIMULATION_RESULT: ${PAYMENT_SIMULATION_RESULT:-SUCCESS}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  notification-service:
-    build:
-      context: ./notification-service
-    container_name: pet-planet-notification
-    restart: unless-stopped
-    environment:
-      NOTIFICATION_SERVICE_PORT: 8084
-      NOTIFICATION_DATABASE_URL: jdbc:postgresql://postgres:5432/${NOTIFICATION_DATABASE_NAME:-petplanet_notification}
-      NOTIFICATION_DATABASE_USERNAME: ${NOTIFICATION_DATABASE_USERNAME:-petplanet_notification}
-      NOTIFICATION_DATABASE_PASSWORD: ${NOTIFICATION_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  shipping-service:
-    build:
-      context: ./shipping-service
-    container_name: pet-planet-shipping
-    restart: unless-stopped
-    environment:
-      SHIPPING_SERVICE_PORT: 8085
-      SHIPPING_DATABASE_URL: jdbc:postgresql://postgres:5432/${SHIPPING_DATABASE_NAME:-petplanet_shipping}
-      SHIPPING_DATABASE_USERNAME: ${SHIPPING_DATABASE_USERNAME:-petplanet_shipping}
-      SHIPPING_DATABASE_PASSWORD: ${SHIPPING_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  delivery-tracking-service:
-    build:
-      context: ./delivery-tracking-service
-    container_name: pet-planet-delivery
-    restart: unless-stopped
-    environment:
-      DELIVERY_SERVICE_PORT: 8086
-      DELIVERY_DATABASE_URL: jdbc:postgresql://postgres:5432/${DELIVERY_DATABASE_NAME:-petplanet_delivery}
-      DELIVERY_DATABASE_USERNAME: ${DELIVERY_DATABASE_USERNAME:-petplanet_delivery}
-      DELIVERY_DATABASE_PASSWORD: ${DELIVERY_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  fulfillment-service:
-    build:
-      context: ./fulfillment-service
-    container_name: pet-planet-fulfillment
-    restart: unless-stopped
-    environment:
-      FULFILLMENT_SERVICE_PORT: 8087
-      FULFILLMENT_DATABASE_URL: jdbc:postgresql://postgres:5432/${FULFILLMENT_DATABASE_NAME:-petplanet_fulfillment}
-      FULFILLMENT_DATABASE_USERNAME: ${FULFILLMENT_DATABASE_USERNAME:-petplanet_fulfillment}
-      FULFILLMENT_DATABASE_PASSWORD: ${FULFILLMENT_DATABASE_PASSWORD:-admin123}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  user-service:
-    build:
-      context: ./user-service
-    container_name: pet-planet-user
-    restart: unless-stopped
-    environment:
-      USER_SERVICE_PORT: 8088
-      USER_DATABASE_URL: jdbc:postgresql://postgres:5432/${USER_DATABASE_NAME:-petplanet_user}
-      USER_DATABASE_USERNAME: ${USER_DATABASE_USERNAME:-petplanet_user}
-      USER_DATABASE_PASSWORD: ${USER_DATABASE_PASSWORD:-admin123}
-      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - pet-planet
-
-  gateway-service:
-    build:
-      context: ./gateway-service
-    container_name: pet-planet-gateway
-    restart: unless-stopped
-    environment:
-      GATEWAY_PORT: 8089
-      USER_SERVICE_URL: http://user-service:8088
-      PET_CATALOG_URL: http://pet-catalog-service:8080
-      ORDER_SERVICE_URL: http://order-service:8081
-      INVENTORY_SERVICE_URL: http://inventory-service:8082
-      PAYMENT_SERVICE_URL: http://payment-service:8083
-      NOTIFICATION_SERVICE_URL: http://notification-service:8084
-      SHIPPING_SERVICE_URL: http://shipping-service:8085
-      DELIVERY_SERVICE_URL: http://delivery-tracking-service:8086
-      FULFILLMENT_SERVICE_URL: http://fulfillment-service:8087
-      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY must be configured}
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
-      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
-    ports:
-      - "${GATEWAY_PORT:-8089}:8089"
-    depends_on:
-      pet-catalog-service:
-        condition: service_started
-      order-service:
-        condition: service_started
-      inventory-service:
-        condition: service_started
-      user-service:
-        condition: service_started
-    networks:
-      - pet-planet
-
-  frontend:
-    build:
-      context: ./frontend
-    container_name: pet-planet-frontend
-    restart: unless-stopped
-    environment:
-      VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
-      VITE_PET_CATALOG_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
-      VITE_ORDER_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
-      VITE_USER_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173"
-    depends_on:
-      - gateway-service
-    networks:
-      - pet-planet
-
   kafka:
     image: apache/kafka:4.0.1
     container_name: pet-planet-kafka
     restart: unless-stopped
+    mem_limit: 640m
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     environment:
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx384m"
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: DOCKER://:29092,HOST://:9092,CONTROLLER://:9093
@@ -312,6 +102,247 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+    networks:
+      - pet-planet
+
+  user-service:
+    <<: *java-service
+    build:
+      context: ./user-service
+    container_name: pet-planet-user
+    environment:
+      <<: *java-env
+      USER_SERVICE_PORT: 8088
+      USER_DATABASE_URL: jdbc:postgresql://postgres:5432/${USER_DATABASE_NAME:-petplanet_user}
+      USER_DATABASE_USERNAME: ${USER_DATABASE_USERNAME:-petplanet_user}
+      USER_DATABASE_PASSWORD: ${USER_DATABASE_PASSWORD:-admin123}
+      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
+      # user-service issues tokens: it is the only service that receives the private signing key.
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY must be configured}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/actuator/health || exit 1"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pet-catalog-service:
+    <<: *java-service
+    build:
+      context: ./pet-catalog-service
+    container_name: pet-planet-catalog
+    environment:
+      <<: *java-env
+      SERVER_PORT: 8080
+      CATALOG_DATABASE_URL: jdbc:postgresql://postgres:5432/${CATALOG_DATABASE_NAME:-petplanet_catalog}
+      CATALOG_DATABASE_USERNAME: ${CATALOG_DATABASE_USERNAME:-petplanet_catalog}
+      CATALOG_DATABASE_PASSWORD: ${CATALOG_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  order-service:
+    <<: *java-service
+    build:
+      context: ./order-service
+    container_name: pet-planet-order
+    environment:
+      <<: *java-env
+      ORDER_SERVICE_PORT: 8081
+      ORDER_DATABASE_URL: jdbc:postgresql://postgres:5432/${ORDER_DATABASE_NAME:-petplanet_order}
+      ORDER_DATABASE_USERNAME: ${ORDER_DATABASE_USERNAME:-petplanet_order}
+      ORDER_DATABASE_PASSWORD: ${ORDER_DATABASE_PASSWORD:-admin123}
+      PET_CATALOG_URL: http://pet-catalog-service:8080
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]
+    depends_on:
+      <<: *infra-ready
+      pet-catalog-service:
+        condition: service_healthy
+
+  inventory-service:
+    <<: *java-service
+    build:
+      context: ./inventory-service
+    container_name: pet-planet-inventory
+    environment:
+      <<: *java-env
+      INVENTORY_SERVICE_PORT: 8082
+      INVENTORY_DATABASE_URL: jdbc:postgresql://postgres:5432/${INVENTORY_DATABASE_NAME:-petplanet_inventory}
+      INVENTORY_DATABASE_USERNAME: ${INVENTORY_DATABASE_USERNAME:-petplanet_inventory}
+      INVENTORY_DATABASE_PASSWORD: ${INVENTORY_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  payment-service:
+    <<: *java-service
+    build:
+      context: ./payment-service
+    container_name: pet-planet-payment
+    environment:
+      <<: *java-env
+      PAYMENT_SERVICE_PORT: 8083
+      PAYMENT_DATABASE_URL: jdbc:postgresql://postgres:5432/${PAYMENT_DATABASE_NAME:-petplanet_payment}
+      PAYMENT_DATABASE_USERNAME: ${PAYMENT_DATABASE_USERNAME:-petplanet_payment}
+      PAYMENT_DATABASE_PASSWORD: ${PAYMENT_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PAYMENT_SIMULATION_RESULT: ${PAYMENT_SIMULATION_RESULT:-SUCCESS}
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  notification-service:
+    <<: *java-service
+    build:
+      context: ./notification-service
+    container_name: pet-planet-notification
+    environment:
+      <<: *java-env
+      NOTIFICATION_SERVICE_PORT: 8084
+      NOTIFICATION_DATABASE_URL: jdbc:postgresql://postgres:5432/${NOTIFICATION_DATABASE_NAME:-petplanet_notification}
+      NOTIFICATION_DATABASE_USERNAME: ${NOTIFICATION_DATABASE_USERNAME:-petplanet_notification}
+      NOTIFICATION_DATABASE_PASSWORD: ${NOTIFICATION_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  shipping-service:
+    <<: *java-service
+    build:
+      context: ./shipping-service
+    container_name: pet-planet-shipping
+    environment:
+      <<: *java-env
+      SHIPPING_SERVICE_PORT: 8085
+      SHIPPING_DATABASE_URL: jdbc:postgresql://postgres:5432/${SHIPPING_DATABASE_NAME:-petplanet_shipping}
+      SHIPPING_DATABASE_USERNAME: ${SHIPPING_DATABASE_USERNAME:-petplanet_shipping}
+      SHIPPING_DATABASE_PASSWORD: ${SHIPPING_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8085/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  delivery-tracking-service:
+    <<: *java-service
+    build:
+      context: ./delivery-tracking-service
+    container_name: pet-planet-delivery
+    environment:
+      <<: *java-env
+      DELIVERY_SERVICE_PORT: 8086
+      DELIVERY_DATABASE_URL: jdbc:postgresql://postgres:5432/${DELIVERY_DATABASE_NAME:-petplanet_delivery}
+      DELIVERY_DATABASE_USERNAME: ${DELIVERY_DATABASE_USERNAME:-petplanet_delivery}
+      DELIVERY_DATABASE_PASSWORD: ${DELIVERY_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8086/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  fulfillment-service:
+    <<: *java-service
+    build:
+      context: ./fulfillment-service
+    container_name: pet-planet-fulfillment
+    environment:
+      <<: *java-env
+      FULFILLMENT_SERVICE_PORT: 8087
+      FULFILLMENT_DATABASE_URL: jdbc:postgresql://postgres:5432/${FULFILLMENT_DATABASE_NAME:-petplanet_fulfillment}
+      FULFILLMENT_DATABASE_USERNAME: ${FULFILLMENT_DATABASE_USERNAME:-petplanet_fulfillment}
+      FULFILLMENT_DATABASE_PASSWORD: ${FULFILLMENT_DATABASE_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]
+    depends_on: *infra-ready
+
+  gateway-service:
+    <<: *java-service
+    build:
+      context: ./gateway-service
+    container_name: pet-planet-gateway
+    environment:
+      <<: *java-env
+      GATEWAY_PORT: 8089
+      USER_SERVICE_URL: http://user-service:8088
+      PET_CATALOG_URL: http://pet-catalog-service:8080
+      ORDER_SERVICE_URL: http://order-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      PAYMENT_SERVICE_URL: http://payment-service:8083
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
+      SHIPPING_SERVICE_URL: http://shipping-service:8085
+      DELIVERY_SERVICE_URL: http://delivery-tracking-service:8086
+      FULFILLMENT_SERVICE_URL: http://fulfillment-service:8087
+      # The gateway only validates tokens: it receives the public key, never the private one.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
+      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
+      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173}
+    ports:
+      - "${GATEWAY_PORT:-8089}:8089"
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health || exit 1"]
+    depends_on:
+      user-service:
+        condition: service_healthy
+      pet-catalog-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      shipping-service:
+        condition: service_started
+      delivery-tracking-service:
+        condition: service_started
+      fulfillment-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: pet-planet-frontend
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:8089}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      gateway-service:
+        condition: service_healthy
     networks:
       - pet-planet
 
