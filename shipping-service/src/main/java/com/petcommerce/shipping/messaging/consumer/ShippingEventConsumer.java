@@ -1,7 +1,7 @@
-package com.petcommerce.shipping.consumer;
+package com.petcommerce.shipping.messaging.consumer;
 
-import com.petcommerce.shipping.event.OrderConfirmedEvent;
-import com.petcommerce.shipping.service.ShippingService;
+import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.shipping.application.ShippingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
