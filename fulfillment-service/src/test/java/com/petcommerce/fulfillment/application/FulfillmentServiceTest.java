@@ -1,13 +1,14 @@
 package com.petcommerce.fulfillment.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.petcommerce.fulfillment.application.FulfillmentService;
 import com.petcommerce.fulfillment.domain.model.FulfillmentRecord;
 import com.petcommerce.fulfillment.domain.model.FulfillmentStatus;
 import com.petcommerce.fulfillment.messaging.event.DeliveryStatusUpdatedEvent;
+import com.petcommerce.fulfillment.messaging.publisher.FulfillmentEventPublisher;
 import com.petcommerce.fulfillment.persistence.repository.FulfillmentOutboxRepository;
 import com.petcommerce.fulfillment.persistence.repository.FulfillmentRecordRepository;
 import com.petcommerce.fulfillment.persistence.repository.ProcessedEventRepository;
-import com.petcommerce.fulfillment.application.FulfillmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,9 +52,7 @@ class FulfillmentServiceTest {
         fulfillmentService = new FulfillmentService(
                 fulfillmentRecordRepository,
                 processedEventRepository,
-                fulfillmentOutboxRepository,
-                kafkaTemplate,
-                objectMapper
+                new FulfillmentEventPublisher(fulfillmentOutboxRepository, kafkaTemplate, objectMapper)
         );
     }
 
