@@ -39,6 +39,10 @@ public class GatewayConfig {
     @Bean
     public RouteLocator gatewayRoutes(RouteLocatorBuilder builder) {
         return builder.routes()
+                .route("auth", route -> route
+                        .path("/api/v1/auth/**")
+                        .filters(f -> f.dedupeResponseHeader("Access-Control-Allow-Origin Access-Control-Allow-Credentials", "RETAIN_UNIQUE"))
+                        .uri(userServiceUrl))
                 .route("user-service", route -> route
                         .path("/api/v1/users", "/api/v1/users/**")
                         .filters(f -> f.dedupeResponseHeader("Access-Control-Allow-Origin Access-Control-Allow-Credentials", "RETAIN_UNIQUE"))

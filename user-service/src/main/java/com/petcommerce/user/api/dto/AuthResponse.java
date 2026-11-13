@@ -1,5 +1,6 @@
-package com.petcommerce.gateway.api.dto;
+package com.petcommerce.user.api.dto;
 
+/** Login/registration result: the signed access token plus the caller's identity. */
 public record AuthResponse(
         String token,
         String tokenType,

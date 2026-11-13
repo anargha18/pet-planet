@@ -22,6 +22,13 @@ spring:
 internal:
   service-token: ${USER_SERVICE_INTERNAL_TOKEN:}
 
+# Token issuance (user-service is the only holder of the private signing key).
+jwt:
+  private-key: ${JWT_PRIVATE_KEY:}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+  issuer: ${JWT_ISSUER:pet-planet}
+  audience: ${JWT_AUDIENCE:pet-planet}
+
 management:
   endpoints:
     web:
