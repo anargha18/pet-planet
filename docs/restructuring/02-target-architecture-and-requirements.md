@@ -18,7 +18,7 @@ Guiding constraints from the project owner:
 | **DEC-3** | Shared code | A **`platform-commons`** Maven module holding *infrastructure only*: outbox relay, idempotent-consumer helper, Kafka error handling, API error model, resource-server security defaults. **No domain or event classes** in it. |
 | **DEC-4** | Payment step | Keep **automatic simulated payment** on reservation, made explicit in UI and docs and compensatable (refunds). |
 | **DEC-5** | Uncommitted work | The current WIP on `config-analysed` is committed as a checkpoint before Phase 0. |
-| **DEC-6** | Folder structure | A strict repository layout and a uniform per-service package layout with enforced boundaries ([§3.0](#30-r-str--folder-structure-and-boundaries)). Moves are done **mechanically and without behavior change** before any functional fix. |
+| **DEC-6** | Folder structure | **All 10 services stay as top-level folders at the repo root** (no `services/` folder), so every service is visible at a glance. The restructuring is **inside** each service: a uniform package layout that separates HTTP, business logic, domain model, exceptions, security, messaging and persistence, with enforced boundaries. The frontend is grouped by feature ([§3.0](#30-r-str--folder-structure-and-boundaries)). Moves are done **mechanically and without behavior change** before any functional fix. |
 
 ## 2. Target system architecture
 
@@ -124,83 +124,100 @@ Every consumed topic also gets a dead-letter topic `<topic>.DLT` (R-EVT-04).
 
 ### 3.0 R-STR — Folder structure and boundaries (DEC-6)
 
-#### Repository layout (target)
+#### Repository layout: unchanged, services stay at the root
 
-Today every service sits at the repo root next to infrastructure, scripts and stray folders. Target:
+The 10 service folders stay exactly where they are, so every service is visible at a glance. The only root-level additions are build and tooling files, plus one shared library folder:
 
 ```
 pet-planet/
-├── pom.xml                         # root aggregator + shared parent (versions, plugins)
-├── mvnw, mvnw.cmd, .mvn/           # Maven wrapper (no global Maven needed)
-├── Makefile                        # up, down, reset, infra, logs, smoke
-├── docker-compose.yml              # full stack; infra-only via `make infra`
-├── .env.example                    # placeholders only, no secrets
-├── README.md · AGENTS.md · PROJECT_CONTEXT.md
+├── pom.xml                         # NEW: root aggregator + shared parent (versions, plugins)
+├── mvnw, mvnw.cmd, .mvn/           # NEW: Maven wrapper (no global Maven needed)
+├── Makefile                        # NEW: up, down, reset, infra, logs, smoke
+├── platform-commons/               # NEW: shared infrastructure-only library (DEC-3), not deployable
+├── scripts/                        # NEW: generate-dev-keys.sh, smoke-test.sh
 │
-├── services/                       # one folder per deployable Spring Boot service, nothing else
-│   ├── gateway-service/
-│   ├── user-service/
-│   ├── pet-catalog-service/
-│   ├── order-service/
-│   ├── inventory-service/
-│   ├── payment-service/
-│   ├── notification-service/
-│   ├── shipping-service/
-│   ├── delivery-tracking-service/
-│   └── fulfillment-service/
-│
-├── platform/                       # shared, non-deployable libraries (infrastructure only)
-│   └── platform-commons/
-│
-├── frontend/                       # React storefront (feature-based, see below)
-│
-├── infrastructure/                 # runtime config for third-party infra only
-│   ├── postgres/init/              # database + role creation
-│   └── kafka/                      # (optional) topic/ACL notes, Kafka UI config
-│
-├── scripts/                        # generate-dev-keys.sh, smoke-test.sh, helpers
-├── postman/                        # optional API collection mirroring the smoke flows
-└── docs/
-    ├── project-context/            # canonical, always-current technical docs
-    └── restructuring/              # this plan + audit (historical once done)
+├── gateway-service/                # ┐
+├── user-service/                   # │
+├── pet-catalog-service/            # │
+├── order-service/                  # │
+├── inventory-service/              # │ unchanged locations
+├── payment-service/                # │
+├── notification-service/           # │
+├── shipping-service/               # │
+├── delivery-tracking-service/      # │
+├── fulfillment-service/            # ┘
+├── frontend/                       # internal layout becomes feature-based (see below)
+├── infrastructure/                 # unchanged (postgres/init)
+├── postman/                        # unchanged
+├── docs/                           # unchanged
+└── docker-compose.yml, .env.example, README.md, AGENTS.md, PROJECT_CONTEXT.md
 ```
 
-Bounded-context map: **edge** = gateway · **identity** = user · **commerce** = catalog, order, inventory, payment · **logistics** = shipping, delivery-tracking, fulfillment (tracking projection) · **engagement** = notification. Contexts are documented, not nested as folders, which keeps Docker and Maven paths simple.
+#### Per-service internal layout (identical pattern in every service)
 
-#### Per-service layout (identical in every service)
+**Problem today:** each service has flat, layer-only packages (`controller/`, `entity/`, `service/`, `exception/`…), and single classes mix unrelated concerns. Examples:
+- `OrderService` combines business rules, authorization/ownership checks, outbox writing, Kafka sending, scheduled relaying and DTO mapping.
+- `InventoryService` and `PaymentService` mix business logic with Kafka plumbing.
+- Domain exceptions, HTTP error mapping, security filters and JWT code sit side by side.
+- Controllers return JPA entities.
 
-Today services use flat, layer-only packages (`controller/`, `entity/`, `service/`…), with entities returned from controllers and Kafka, HTTP and persistence concerns mixed inside one service class. Target, for base package `com.petcommerce.<service>`:
+**Target**, for base package `com.petcommerce.<svc>` (the folder each class lives in tells you its job):
 
 ```
-services/<name>-service/
-├── Dockerfile
-├── pom.xml
-└── src/
-    ├── main/java/com/petcommerce/<svc>/
-    │   ├── <Svc>Application.java
-    │   ├── api/                    # INBOUND HTTP adapter
-    │   │   ├── <X>Controller.java
-    │   │   ├── dto/                # request/response records (never entities)
-    │   │   └── ApiExceptionHandler.java
-    │   ├── messaging/              # Kafka adapters
-    │   │   ├── consumer/           # @KafkaListener classes: deserialize → call application
-    │   │   ├── event/              # this service's own event payload records (in + out)
-    │   │   └── publisher/          # writes events to the outbox
-    │   ├── application/            # use cases: transactions, orchestration, idempotency
-    │   ├── domain/                 # entities, enums, state machines, domain exceptions
-    │   ├── persistence/            # Spring Data repositories (+ outbox/processed-event entities)
-    │   ├── client/                 # OUTBOUND HTTP clients (e.g. order → catalog), only if needed
-    │   └── config/                 # Spring wiring: security, Kafka, beans
-    ├── main/resources/
-    │   ├── application.yml         # localhost defaults; Docker overrides via env vars
-    │   └── db/migration/           # Flyway, immutable once applied
-    └── test/java/com/petcommerce/<svc>/
-        ├── (mirrors main packages) # unit tests
-        ├── integration/            # Testcontainers (Postgres + Kafka)
-        └── ArchitectureTest.java   # ArchUnit boundary rules
+<name>-service/src/main/java/com/petcommerce/<svc>/
+├── <Svc>Application.java
+│
+├── api/                         # HTTP in/out ONLY: no business rules
+│   ├── controller/              #   thin controllers: validate input → call application → map to DTO
+│   ├── dto/                     #   request/response records (never entities)
+│   ├── mapper/                  #   entity ↔ DTO mapping
+│   └── error/                   #   ApiExceptionHandler + ErrorResponse (maps exceptions → HTTP status)
+│
+├── application/                 # BUSINESS LOGIC: use cases, one class per responsibility
+│   └── *Service.java            #   e.g. order: OrderCommandService (create/cancel), OrderQueryService
+│                                #   (get/list), OrderSagaService (reacts to saga events)
+│
+├── domain/                      # CORE MODEL: no Spring web, Kafka or HTTP imports
+│   ├── model/                   #   entities, value objects, enums
+│   ├── policy/                  #   rules/state machines (e.g. OrderStateMachine, ReservationPolicy)
+│   └── exception/               #   business exceptions (OrderNotFoundException, InvalidOrderStateException…)
+│
+├── security/                    # AUTH CONCERNS ONLY: separate from business logic
+│   ├── SecurityConfig.java      #   filter chain, route rules
+│   ├── CurrentUser.java         #   read userId/role from the validated token
+│   └── *AccessPolicy.java       #   ownership checks (e.g. OrderAccessPolicy), called by application
+│
+├── messaging/                   # KAFKA ONLY
+│   ├── event/                   #   this service's own event payload records (in + out)
+│   ├── consumer/                #   @KafkaListener adapters: deserialize → call application
+│   └── publisher/               #   builds events and writes them to the outbox
+│
+├── persistence/                 # DATABASE ONLY
+│   └── repository/              #   Spring Data repositories (outbox/processed-event via platform-commons)
+│
+├── client/                      # OUTBOUND HTTP to other services (only order → catalog today)
+│
+└── config/                      # non-security Spring wiring (Kafka topics, beans, properties)
+
+<name>-service/src/main/resources/
+├── application.yml              # localhost defaults; Docker overrides via env vars
+└── db/migration/                # Flyway, immutable once applied
+
+<name>-service/src/test/java/com/petcommerce/<svc>/
+├── (mirrors main packages)      # unit tests
+├── integration/                 # Testcontainers (Postgres + Kafka)
+└── ArchitectureTest.java        # ArchUnit boundary rules (R-STR-03)
 ```
 
-The gateway has no database or Kafka, so it has only `config/`, `security/` and `routing/`. Folders a service doesn't need are omitted, never left empty.
+Service-specific notes:
+- **user-service**: authentication is separated from user management.
+  - `application/AuthService` handles register and login.
+  - `application/UserService` handles profile and admin CRUD.
+  - `security/token/` holds JWT creation (`TokenIssuer`, key loading).
+  - `security/` also holds password hashing config and the internal-token filter.
+- **gateway-service** has no database, domain or Kafka, so it has only `config/`, `routing/` (route definitions) and `security/` (token validation, role rules, CORS).
+- **payment-service**: payment simulation lives in `application/PaymentProcessor` behind an interface, separate from the event handling in `application/PaymentSagaService`.
+- Folders a service doesn't need are omitted, never left empty.
 
 #### Frontend layout (target)
 
@@ -226,19 +243,19 @@ frontend/src/
 
 | ID | Requirement | Acceptance |
 |---|---|---|
-| R-STR-01 | Move the 10 services into `services/` and create `platform/platform-commons/` and `scripts/`, using `git mv` so history is preserved. Update the root POM modules, Compose `build` paths, Dockerfiles, docs and AGENTS.md. | `git log --follow` works on moved files; `docker compose config` is valid. |
-| R-STR-02 | Re-package every service into the per-service layout above. This is a **pure move**: package and import changes only, with no logic, signature or behavior change. It lands as its own commit(s), one per service, separate from functional fixes. | Every service compiles and the existing unit tests give the same results as the pre-move baseline. |
-| R-STR-03 | **Dependency rules**, enforced by an ArchUnit `ArchitectureTest` in each service: `domain` depends on nothing in `api`, `messaging`, `persistence`, `client` or `config`; `api` and `messaging.consumer` call only `application`; `application` must not import `api.dto` or Kafka/HTTP types; nothing outside `persistence` uses repositories directly except `application`. Services never import another service's classes. `platform-commons` contains no `com.petcommerce.<service>` domain types. | `./mvnw verify` fails if a rule is broken. |
+| R-STR-01 | **Service folders do not move.** Only add root-level `pom.xml`, Maven wrapper, `Makefile`, `platform-commons/` and `scripts/`. | All 10 services remain at `/<name>-service`. |
+| R-STR-02 | Re-package every service into the internal layout above, in two steps per service. **Step A is a pure move** (`git mv`, package and import changes only, no logic change). **Step B splits mixed classes** along responsibility lines, still with no behavior change: e.g. `OrderService` → command, query, saga and access-policy classes plus `messaging/publisher`; DTO mapping moves into `api/mapper`; exception handlers move into `api/error`. Each service lands as its own commit(s), separate from functional fixes. | After each service: it compiles and its unit tests give the same results as the pre-move baseline. |
+| R-STR-03 | **Dependency rules**, enforced by an ArchUnit `ArchitectureTest` in each service: `domain` depends on nothing in `api`, `messaging`, `persistence`, `client`, `security` or `config`; `api.controller` and `messaging.consumer` call only `application`; `application` must not import `api.dto`, `api.error` or Kafka/HTTP types; repositories are used only from `application`; business exceptions live only in `domain.exception`, and HTTP mapping lives only in `api.error`; services never import another service's classes; `platform-commons` contains no service domain types. | `./mvnw verify` fails if a rule is broken. |
 | R-STR-04 | Naming conventions: `*Controller`, `*Request`/`*Response` (DTOs), `*Event` (Kafka payload), `*Consumer`, `*Publisher`, `*Service` (application use case), `*Repository`, `*Client`. One public top-level type per file. | Reviewed in each PR. |
-| R-STR-05 | Restructure the frontend into the layout above. Like R-STR-02 it is a pure move first (imports only), with the behavior changes from R-FE following separately. | `npm run build` succeeds and the app behaves identically after the move. |
-| R-STR-06 | Remove clutter: root `node_modules/`, `.DS_Store` files, the empty `.postman/` workspace stub (or document it), stale READMEs. Extend `.gitignore` accordingly. | `git status` clean after a fresh build. |
+| R-STR-05 | Restructure the frontend into the **feature-based** layout above. Each feature folder owns its pages, components, hooks and context; shared code goes in `components/` or `api/` only. A feature must not import another feature's internals; it imports shared code or a feature's `index.js` exports. Like R-STR-02 this is a pure move first (imports only), with the behavior changes from R-FE following separately. | `npm run build` succeeds and the app behaves identically after the move. |
+| R-STR-06 | Remove clutter: root `node_modules/` and `.DS_Store` files. Extend `.gitignore` accordingly. | `git status` clean after a fresh build. |
 
 ### R-INF — Infrastructure and local developer experience (fixes F4–F7, A5)
 
 | ID | Requirement | Acceptance |
 |---|---|---|
 | R-INF-01 | Root Maven **aggregator POM** listing all services (plus `platform-commons`, DEC-3), a shared parent for dependency versions (Spring Boot, Spring Cloud BOM, Testcontainers, springdoc), and a **Maven wrapper** at the root. | `./mvnw -q verify` builds and tests everything with no global Maven install. |
-| R-INF-02 | Dockerfiles build from the repo root context (`./mvnw -pl <svc> -am package`) with layered jars. | `docker compose build` succeeds from a clean clone. |
+| R-INF-02 | Dockerfiles stay in each service folder but build from the repo root context (`./mvnw -pl <svc> -am package`), so they can use the root POM and `platform-commons`, with layered jars. | `docker compose build` succeeds from a clean clone. |
 | R-INF-03 | Every Spring service has a Compose **healthcheck** on `/actuator/health/readiness`. `depends_on` uses `service_healthy` wherever there is a real dependency. | `docker compose ps` shows all services `healthy`. |
 | R-INF-04 | JVM memory caps (e.g. `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75` plus a Compose `mem_limit` around 384–512 MB per service). README documents a recommended Docker Desktop memory size. | The full stack starts on 8 GB Docker Desktop without OOM kills. |
 | R-INF-05 | A `Makefile` (or `scripts/`) with: `up`, `down`, `reset` (`down -v` + rebuild), `infra` (Postgres + Kafka + Kafka UI only), `logs s=<svc>`, `smoke`. | Each target works and is listed in the README. |
@@ -340,7 +357,7 @@ Each phase ends with a working, runnable system and its own commit/PR. Phases 0�
 
 | Phase | Goal | Requirements | Exit criteria |
 |---|---|---|---|
-| **0a. Baseline and structure** (no behavior change) | Buildable, well-organized codebase before any fix | DEC-5 checkpoint commit; R-INF-01 (root POM + wrapper) → record a **test baseline**; R-STR-01, R-STR-02, R-STR-03, R-STR-04, R-STR-06; R-INF-02 | Every service compiles; unit-test results equal the baseline; ArchUnit rules pass; `docker compose build` works from the new paths. |
+| **0a. Baseline and structure** (no behavior change) | Buildable, well-organized codebase before any fix | DEC-5 checkpoint commit; R-INF-01 (root POM + wrapper) → record a **test baseline**; R-STR-01, R-STR-02, R-STR-03, R-STR-04, R-STR-06; R-INF-02 | Service folders unchanged at the root; every service compiles; unit-test results equal the baseline; ArchUnit rules pass; `docker compose build` works. |
 | **0b. Make it run** | Clean clone → stack up → browser login works | R-INF-03…06, R-INF-09, R-DB-01, R-DB-02 (user seed only), **R-SEC-01 (token issuance moves to user-service)**, R-SEC-03, R-TEST-02, R-TEST-03 | `make reset && make up` → all healthy; both seeded users log in from the browser via user-service tokens; the gateway validates them; catalog browses. |
 | **1. Event backbone** | Events actually flow; failures are visible | R-EVT-01…08, R-INF-07, R-TEST-01 (existing hops) | A checkout reaches `PAID`/`CONFIRMED` and a shipment exists; a malformed message lands in the DLT. |
 | **2. Saga correctness** | Compensation and consistency | R-SAGA-01…05, R-SAGA-07, R-SAGA-08, R-DB-02 (order/catalog/inventory/payment) | Smoke: happy, cancel, payment-failure and expiry paths all end consistent (no orphan reservations, refunds issued). |
