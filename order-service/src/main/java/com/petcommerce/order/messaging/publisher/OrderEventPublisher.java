@@ -6,6 +6,7 @@ import com.petcommerce.order.domain.model.OrderItem;
 import com.petcommerce.order.messaging.event.OrderCancelledEvent;
 import com.petcommerce.order.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.order.messaging.event.OrderCreatedEvent;
+import com.petcommerce.order.messaging.event.OrderFailedEvent;
 import com.petcommerce.order.persistence.entity.OrderOutboxEvent;
 import com.petcommerce.order.persistence.repository.OrderOutboxRepository;
 import com.petcommerce.platform.outbox.OutboxPayloads;
@@ -51,7 +52,8 @@ public class OrderEventPublisher {
         saveToOutbox(eventId, "order-created-events", "OrderCreatedEvent", order.getId(), correlationId, event);
     }
 
-    public void publishOrderCancelled(Order order) {
+    /** reason: CUSTOMER_CANCELLED or RESERVATION_EXPIRED. Inventory releases pets; payment refunds or blocks charging. */
+    public void publishOrderCancelled(Order order, String reason) {
         if (order.getId() == null) {
             return;
         }
@@ -66,9 +68,29 @@ public class OrderEventPublisher {
                 correlationId,
                 order.getId(),
                 order.getCustomerId(),
-                petIds(order)
+                petIds(order),
+                reason
         );
         saveToOutbox(eventId, "order-cancelled-events", "OrderCancelledEvent", order.getId(), correlationId, event);
+    }
+
+    /** Inventory releases the order's reservations; payment refunds a successful charge or blocks a later one. */
+    public void publishOrderFailed(Order order, UUID correlationId, String reason) {
+        UUID eventId = UUID.randomUUID();
+        UUID effectiveCorrelationId = correlationId != null ? correlationId : UUID.randomUUID();
+        OrderFailedEvent event = new OrderFailedEvent(
+                eventId,
+                "OrderFailedEvent",
+                1,
+                UUID.randomUUID(),
+                Instant.now(),
+                effectiveCorrelationId,
+                order.getId(),
+                order.getCustomerId(),
+                petIds(order),
+                reason
+        );
+        saveToOutbox(eventId, "order-failed-events", "OrderFailedEvent", order.getId(), effectiveCorrelationId, event);
     }
 
     public void publishOrderConfirmed(Order order, UUID correlationId) {

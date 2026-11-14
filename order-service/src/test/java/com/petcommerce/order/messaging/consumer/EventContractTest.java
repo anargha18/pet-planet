@@ -3,8 +3,9 @@ package com.petcommerce.order.messaging.consumer;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.petcommerce.order.messaging.event.PaymentSucceededEvent;
+import com.petcommerce.order.messaging.event.InventorySaleConflictEvent;
 import com.petcommerce.order.messaging.event.PetReservedEvent;
+import com.petcommerce.order.messaging.event.PetsSoldEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
@@ -38,14 +39,22 @@ class EventContractTest {
     }
 
     @Test
-    void consumesPaymentSucceededAsProduced() throws Exception {
-        PaymentSucceededEvent event = read("payment-succeeded-events", PaymentSucceededEvent.class);
+    void consumesPetsSoldAsProduced() throws Exception {
+        PetsSoldEvent event = read("pets-sold-events", PetsSoldEvent.class);
 
         assertNotNull(event.eventId(), "eventId");
         assertNotNull(event.orderId(), "orderId");
-        assertNotNull(event.paymentId(), "paymentId");
-        assertNotNull(event.amount(), "amount");
+        assertNotNull(event.petIds(), "petIds");
         assertNotNull(event.correlationId(), "correlationId");
+    }
+
+    @Test
+    void consumesInventorySaleConflictAsProduced() throws Exception {
+        InventorySaleConflictEvent event = read("inventory-sale-conflict-events", InventorySaleConflictEvent.class);
+
+        assertNotNull(event.eventId(), "eventId");
+        assertNotNull(event.orderId(), "orderId");
+        assertNotNull(event.reason(), "reason");
     }
 
     private static <T> T read(String topic, Class<T> type) throws Exception {

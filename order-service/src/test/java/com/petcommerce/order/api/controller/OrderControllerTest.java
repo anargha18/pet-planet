@@ -145,4 +145,13 @@ class OrderControllerTest {
                         .content(body))
                 .andExpect(status().isServiceUnavailable());
     }
+
+    @Test
+    void malformedJsonBodyReturnsBadRequestNotServerError() throws Exception {
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(user("7").roles("USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[\"petId\"]}"))
+                .andExpect(status().isBadRequest());
+    }
 }

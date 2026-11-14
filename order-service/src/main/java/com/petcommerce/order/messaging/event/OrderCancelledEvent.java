@@ -13,7 +13,9 @@ public record OrderCancelledEvent(
         UUID correlationId,
         Long orderId,
         Long customerId,
-        List<UUID> petIds
+        List<UUID> petIds,
+        /** CUSTOMER_CANCELLED or RESERVATION_EXPIRED. */
+        String reason
 ) {
 }
 
