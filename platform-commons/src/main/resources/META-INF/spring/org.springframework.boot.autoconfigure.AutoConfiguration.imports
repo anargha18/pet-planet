@@ -1,0 +1,2 @@
+com.petcommerce.platform.kafka.KafkaPlatformAutoConfiguration
+com.petcommerce.platform.outbox.OutboxAutoConfiguration
