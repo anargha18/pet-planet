@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +23,7 @@ import java.util.List;
  * A service only writes outbox rows inside its business transaction and exposes an OutboxStore; publishing is here.
  */
 @AutoConfiguration(after = {KafkaAutoConfiguration.class, TransactionAutoConfiguration.class})
+@ConditionalOnClass(KafkaTemplate.class)
 @ConditionalOnBean(OutboxStore.class)
 @EnableScheduling
 public class OutboxAutoConfiguration {

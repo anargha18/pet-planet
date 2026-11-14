@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Skipped automatically when Docker is not available.
  */
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(classes = KafkaPlatformIntegrationTest.TestApp.class, properties = {
+@SpringBootTest(classes = KafkaPlatformIntegrationTest.TestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {
         "spring.kafka.consumer.group-id=platform-it",
         "spring.kafka.consumer.auto-offset-reset=earliest",
         "spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer",
