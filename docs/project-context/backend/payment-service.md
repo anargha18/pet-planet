@@ -7,4 +7,4 @@
 - A charge and the closing of the same order are serialized with a PostgreSQL advisory lock (`PaymentRepository.lockOrder`, `pg_advisory_xact_lock`): whichever runs second sees the other's result.
 - `client/SimulatedPaymentGateway` (DEC-4, no real money): `PAYMENT_SIMULATION_RESULT` = `SUCCESS` (default) or `FAILURE`; `PAYMENT_SIMULATION_DELAY` (ISO-8601, default `PT0S`) makes charges slow, so the smoke test can reproduce cancel/expiry races.
 - Events go through `payment_outbox`, published by the shared `platform-commons` relay.
-- Exposes `GET /api/v1/payments/order/{orderId}` via `PaymentController`.
+- Exposes `GET /api/v1/payments/order/{orderId}` via `PaymentController`, returning `PaymentResponse` (never the entity). Requires a valid JWT; `PaymentService.getForOrder` allows only the order's owner (`payments.customer_id`, from `PetReservedEvent.customerId`, migration `V4`) or an admin (403 otherwise, 404 if no payment). Payments created before V4 have no owner and are admin-only.

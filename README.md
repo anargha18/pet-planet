@@ -4,7 +4,7 @@ Event-driven pet e-commerce platform built with Java 17, Spring Boot 3.5.5, Spri
 
 ## Architecture Highlights
 
-- **API Gateway (`gateway-service`, `:8089`)**: The only published application API entrypoint. It validates RS256 JWTs, applies edge role checks, handles CORS, and routes requests to private backend services.
+- **API Gateway (`gateway-service`, `:8089`)**: The only published application API entrypoint. It validates RS256 JWTs, applies coarse role checks, handles CORS, and routes requests to private backend services. Every service validates the JWT again and enforces record ownership itself (see [security](docs/project-context/security.md)).
 - **User management (`user-service`, internal `:8088`)**: Owns account records, BCrypt password hashes, login/registration, and RS256 token issuance (the only service with the private key), plus user/profile CRUD and soft deactivation.
 - **Choreographed Checkout Saga with Compensating Rollbacks**:
   1. `order-service` (`:8081`) validates catalog availability, snapshots pet pricing, saves the order (`CREATED`), and publishes `OrderCreatedEvent` via its transactional outbox (`order-created-events`).
@@ -19,13 +19,15 @@ Event-driven pet e-commerce platform built with Java 17, Spring Boot 3.5.5, Spri
 Prerequisites: Docker Desktop with **at least 4 GB of memory (6 GB recommended)**, plus `make`. JDK 17 is only needed to run tests or services outside Docker. Maven is not needed; the repo ships a Maven wrapper.
 
 ```sh
-make up        # creates .env from .env.example if missing, builds, starts, and waits until every service is healthy
+make up        # creates .env and generates local secrets if missing (scripts/generate-dev-keys.sh), builds, starts, waits until healthy
 make ps        # container status and health
 make logs s=order-service   # follow one service's logs
 make down      # stop (keeps data)
 ```
 
 **First run after pulling these changes:** run `make reset` once. It deletes the local Postgres and Kafka volumes (all local data) and starts fresh. Earlier commits edited already-applied database migrations, so old volumes fail Flyway validation.
+
+**Secrets:** no keys are committed. `make up` generates a local RSA key pair and the internal gateway token into `.env` (`scripts/generate-dev-keys.sh`). If your `.env` predates this (it contains the old shared development key), rotate once with `scripts/generate-dev-keys.sh --force` and log in again.
 
 Other commands: `make infra` (Postgres + Kafka only, to run services from your IDE), `make test` (all backend tests), `make frontend-check` (frontend build + folder-boundary check), `make help`.
 

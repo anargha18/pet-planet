@@ -7,7 +7,7 @@ All 10 services stay as top-level folders at the repository root. Inside each se
 | Path | Purpose |
 |---|---|
 | `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/` | Root Maven aggregator and wrapper: `./mvnw test` builds and tests all services without a global Maven install. Services still use `spring-boot-starter-parent` directly. |
-| `platform-commons/` | Shared **infrastructure-only** library (no domain or event classes): Kafka conventions (JSON converter, retries + `<topic>.DLT`, MDC correlation) and the transactional-outbox relay (`OutboxMessage`, `OutboxStore`, `OutboxRelay`), applied via Spring Boot auto-configuration. Services may depend on `com.petcommerce.platform`, never on each other. |
+| `platform-commons/` | Shared **infrastructure-only** library (no domain or event classes): Kafka conventions (JSON converter, retries + `<topic>.DLT`, MDC correlation) the transactional-outbox relay (`OutboxMessage`, `OutboxStore`, `OutboxRelay`), and since Phase 3 the HTTP conventions: `security` (`PlatformJwt` token contract, `PlatformHttpSecurity` resource-server setup, `AuthenticatedCaller`) and `web` (`ApiError`, `PlatformExceptionHandler`, `CorrelationIdFilter`). Applied via Spring Boot auto-configuration; its framework dependencies are optional, so each part switches on only where the service has the matching library (Kafka, Spring MVC, Spring Security). Its test-jar provides `TestJwtIssuer` for service tests. Services may depend on `com.petcommerce.platform`, never on each other. |
 | `<name>-service/` (×10) | One deployable Spring Boot service each, with its own `pom.xml`, `Dockerfile` and Flyway migrations. |
 | `frontend/` | React storefront. |
 | `infrastructure/postgres/init/` | Database and role creation for the local Postgres container. |
@@ -20,7 +20,7 @@ All 10 services stay as top-level folders at the repository root. Inside each se
 | `api.controller` | Thin `@RestController` classes: validate input → call `application` → return DTOs | `application`, `api.dto`, `api.mapper`, `domain.model` (enums in parameters) |
 | `api.dto` | Request/response records | — |
 | `api.mapper` | Entity → response DTO conversion (static methods) | `api.dto`, `domain.model` |
-| `api.error` | `@RestControllerAdvice` exception → HTTP mapping, error body | `domain.exception` |
+| `api.error` | `@RestControllerAdvice` for this service's domain exceptions → shared `ApiError` body; declared `@Order(Ordered.HIGHEST_PRECEDENCE)` so it runs before platform-commons' generic handler | `domain.exception`, `com.petcommerce.platform.web` |
 | `application` | Business use cases, transactions, idempotency. One class per responsibility (e.g. `OrderCommandService`, `OrderQueryService`, `OrderSagaService`; `AuthService` vs `UserService`) | `domain`, `persistence`, `messaging.publisher`, `messaging.event`, `security` (access policies), `client`, `api.dto` + `api.mapper` (see note) |
 | `domain.model` | JPA entities, enums | nothing in the service outside `domain` |
 | `domain.policy` | Pure business rules (e.g. `EmailPolicy`) | `domain` only |
