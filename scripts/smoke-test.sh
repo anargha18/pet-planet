@@ -7,6 +7,8 @@
 #   3. payment declined      -> order FAILED, payment FAILED, pet AVAILABLE again
 #   4. cancel during charge  -> order CANCELLED, payment REFUNDED, pet AVAILABLE again
 #   5. reservation expiry    -> order CANCELLED, payment REFUNDED, pet AVAILABLE again
+#   S. security (Phase 3)    -> each service rejects another customer's records (403), owner/admin allowed,
+#                               shared error body, coarse gateway rules (401 without token, admin-only prefixes)
 # Scenarios 3-5 restart payment/inventory with test settings; defaults are restored at the end.
 # Each scenario creates its own fresh pet (as admin), so the seeded catalog is not used up.
 set -euo pipefail
@@ -91,6 +93,34 @@ check "payment" "$(payment_status "$USER_TOKEN" "$ORDER")" SUCCEEDED
 wait_for "pet availability" 15 SOLD pet_status "$PET"
 wait_for "shipment created" 15 200 http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/shipments/order/$ORDER"
 SOLD_PET=$PET
+
+log "S. Security: ownership is enforced by each owning service"
+OWNER_ID=$(curl -sf -m 10 -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/orders/$ORDER" | json "d['customerId']")
+OTHER_EMAIL="smoke-$(date +%s)$RANDOM@example.com"
+OTHER_TOKEN=$(curl -sf -m 10 -X POST "$GATEWAY/api/v1/auth/register" -H 'Content-Type: application/json' \
+  -d "$(printf '{"email":"%s","password":"password123","firstName":"Smoke","lastName":"Other"}' "$OTHER_EMAIL")" | json "d['token']")
+for path in orders/$ORDER payments/order/$ORDER shipments/order/$ORDER notifications/order/$ORDER \
+            deliveries/order/$ORDER fulfillment/order/$ORDER; do
+  # owner first (also waits until the asynchronous record exists), then another customer, then admin
+  wait_for "owner GET /$path" 15 200 http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/$path"
+  check "other customer GET /$path" "$(http_code -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/$path")" 403
+  check "admin GET /$path" "$(http_code -H "Authorization: Bearer $ADMIN" "$GATEWAY/api/v1/$path")" 200
+done
+check "other customer lists owner's notifications" \
+  "$(http_code -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/notifications/customer/$OWNER_ID")" 403
+check "owner lists own notifications" \
+  "$(http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/notifications/customer/$OWNER_ID")" 200
+check "no token (HTTP)" "$(http_code "$GATEWAY/api/v1/orders")" 401
+check "401 body uses shared error shape" \
+  "$(curl -s -m 10 "$GATEWAY/api/v1/orders" | json "sorted(k for k in d)")" \
+  "['correlationId', 'error', 'message', 'path', 'status', 'timestamp']"
+check "403 body from a service uses shared error shape" \
+  "$(curl -s -m 10 -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/payments/order/$ORDER" | json "d['status'], d['error'], bool(d['correlationId'])")" \
+  "403 Forbidden True"
+check "user on admin-only /users (HTTP)" "$(http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/users")" 403
+check "user marks delivered (HTTP)" "$(http_code -X PUT -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/deliveries/order/$ORDER/delivered")" 403
+check "unknown order payment (HTTP)" "$(http_code -H "Authorization: Bearer $ADMIN" "$GATEWAY/api/v1/payments/order/999999999")" 404
+check "own profile from token (HTTP)" "$(http_code -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/users/me")" 200
 
 log "2. Archive rules"
 PET=$(create_pet "$ADMIN")

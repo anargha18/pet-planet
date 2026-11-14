@@ -29,8 +29,10 @@ export const extractApiError = (error) => {
   const responseData = error?.response?.data;
 
   if (responseData) {
-    if (responseData.error) return responseData.error;
+    // Shared backend error body: { status, error, message, path, timestamp, correlationId }.
+    // `message` is the human-readable explanation; `error` is only the HTTP reason phrase.
     if (responseData.message) return responseData.message;
+    if (responseData.error) return responseData.error;
     if (responseData.details?.length) return responseData.details[0];
     if (Array.isArray(responseData)) return responseData[0];
   }
