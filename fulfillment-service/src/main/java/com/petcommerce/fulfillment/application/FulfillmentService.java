@@ -1,5 +1,9 @@
 package com.petcommerce.fulfillment.application;
 
+import com.petcommerce.platform.security.AuthenticatedCaller;
+import com.petcommerce.fulfillment.api.dto.FulfillmentResponse;
+import com.petcommerce.fulfillment.api.mapper.FulfillmentRecordMapper;
+import com.petcommerce.fulfillment.domain.exception.FulfillmentNotFoundException;
 import com.petcommerce.fulfillment.domain.model.FulfillmentRecord;
 import com.petcommerce.fulfillment.domain.model.FulfillmentStatus;
 import com.petcommerce.fulfillment.messaging.event.DeliveryStatusUpdatedEvent;
@@ -34,6 +38,22 @@ public class FulfillmentService {
         this.fulfillmentRecordRepository = fulfillmentRecordRepository;
         this.processedEventRepository = processedEventRepository;
         this.eventPublisher = eventPublisher;
+    }
+
+
+    /** The fulfillment record of one order: 404 if none, 403 unless the caller owns the order or is an admin (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public FulfillmentResponse getForOrder(Long orderId, AuthenticatedCaller caller) {
+        FulfillmentRecord record = getFulfillmentByOrderId(orderId).orElseThrow(() -> new FulfillmentNotFoundException(orderId));
+        caller.requireAccessTo(record.getCustomerId());
+        return FulfillmentRecordMapper.toResponse(record);
+    }
+
+    /** All fulfillment records of a customer: users may only ask for their own, admins for anyone (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public List<FulfillmentResponse> getForCustomer(Long customerId, AuthenticatedCaller caller) {
+        caller.requireAccessTo(customerId);
+        return getFulfillmentsByCustomerId(customerId).stream().map(FulfillmentRecordMapper::toResponse).toList();
     }
 
     public Optional<FulfillmentRecord> getFulfillmentByOrderId(Long orderId) {

@@ -1,64 +1,41 @@
 package com.petcommerce.catalog.api.error;
 
+import com.petcommerce.platform.web.ApiError;
 import com.petcommerce.catalog.domain.exception.PetNotArchivableException;
 import com.petcommerce.catalog.domain.exception.PetNotFoundException;
-
 import jakarta.servlet.http.HttpServletRequest;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.Instant;
-import java.util.List;
-
+/**
+ * pet-catalog-service domain exceptions → shared {@link ApiError} body (R-SEC-06). Validation, malformed JSON, access-denied and unexpected
+ * errors are handled by platform-commons' {@code PlatformExceptionHandler} (lower precedence).
+ */
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(PetNotFoundException.class)
-    public ResponseEntity<ApiError> handleNotFound(PetNotFoundException exception, HttpServletRequest request) {
-        log.warn("Pet request failed with not found: method={}, path={}",
-            request.getMethod(), request.getRequestURI());
-        return response(HttpStatus.NOT_FOUND, exception.getMessage(), List.of(request.getRequestURI()));
+    public ResponseEntity<ApiError> petNotFound(PetNotFoundException ex, HttpServletRequest request) {
+        return respond(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
     @ExceptionHandler(PetNotArchivableException.class)
-    public ResponseEntity<ApiError> handleNotArchivable(PetNotArchivableException exception, HttpServletRequest request) {
-        log.warn("Pet archive rejected: method={}, path={}", request.getMethod(), request.getRequestURI());
-        return response(HttpStatus.CONFLICT, exception.getMessage(), List.of(request.getRequestURI()));
+    public ResponseEntity<ApiError> petNotArchivable(PetNotArchivableException ex, HttpServletRequest request) {
+        return respond(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiError> handleValidation(
-            MethodArgumentNotValidException exception,
-            HttpServletRequest request
-    ) {
-        List<String> details = exception.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .toList();
-        log.warn("Request validation failed: method={}, path={}, fields={}",
-            request.getMethod(), request.getRequestURI(), details.stream()
-                .map(detail -> detail.substring(0, detail.indexOf(':')))
-                .toList());
-        return response(HttpStatus.BAD_REQUEST, "Request validation failed", details);
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiError> handleGeneralException(Exception exception, HttpServletRequest request) {
-        log.error("Unexpected error while processing {}",
-            request.getRequestURI(),
-            exception);
-        return response(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", List.of(request.getRequestURI()));
-    }
-    
-    private ResponseEntity<ApiError> response(HttpStatus status, String message, List<String> details) {
-        return ResponseEntity.status(status).body(new ApiError(
-                Instant.now(), status.value(), status.getReasonPhrase(), message, details));
+    private static ResponseEntity<ApiError> respond(HttpStatus status, String message, HttpServletRequest request) {
+        log.warn("Request failed: status={}, method={}, path={}, message={}",
+                status.value(), request.getMethod(), request.getRequestURI(), message);
+        return ResponseEntity.status(status).body(ApiError.of(status, message, request.getRequestURI()));
     }
 }

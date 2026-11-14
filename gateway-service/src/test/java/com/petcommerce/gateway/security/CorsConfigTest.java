@@ -20,7 +20,7 @@ class CorsConfigTest {
     private static final String GATEWAY = "http://localhost:8089";
 
     private final CorsWebFilter corsWebFilter =
-            new CorsConfig().corsWebFilter("http://localhost:5173, http://127.0.0.1:5173");
+            new CorsWebFilter(new CorsConfig().corsConfigurationSource("http://localhost:5173, http://127.0.0.1:5173"));
 
     @Test
     void loginPreflightFromStorefrontIsAllowed() {

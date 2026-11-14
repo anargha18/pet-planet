@@ -119,7 +119,7 @@ class PaymentServiceTest {
 
     @Test
     void closingAnOrderRefundsItsSuccessfulPayment() {
-        Payment succeeded = new Payment(ORDER_ID, new BigDecimal("950.00"), "USD", PaymentStatus.SUCCEEDED, "txn-1");
+        Payment succeeded = new Payment(ORDER_ID, 7L, new BigDecimal("950.00"), "USD", PaymentStatus.SUCCEEDED, "txn-1");
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(succeeded));
 
         paymentService.handleOrderClosed(UUID.randomUUID(), ORDER_ID, UUID.randomUUID(), "ORDER_CANCELLED:CUSTOMER_CANCELLED");
@@ -143,7 +143,7 @@ class PaymentServiceTest {
 
     private PetReservedEvent reserved(BigDecimal total) {
         return new PetReservedEvent(UUID.randomUUID(), "PetReservedEvent", 1, UUID.randomUUID(), Instant.now(),
-                UUID.randomUUID(), ORDER_ID, UUID.randomUUID(), UUID.randomUUID(), total);
+                UUID.randomUUID(), ORDER_ID, UUID.randomUUID(), UUID.randomUUID(), total, 7L);
     }
 
     private List<String> publishedEventTypes() {

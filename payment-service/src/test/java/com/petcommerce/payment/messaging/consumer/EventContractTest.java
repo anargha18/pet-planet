@@ -36,6 +36,7 @@ class EventContractTest {
         assertNotNull(event.petId(), "petId");
         assertNotNull(event.totalAmount(), "totalAmount");
         assertNotNull(event.correlationId(), "correlationId");
+        assertNotNull(event.customerId(), "customerId");
     }
 
     @Test

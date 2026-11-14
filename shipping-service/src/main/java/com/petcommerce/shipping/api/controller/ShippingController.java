@@ -1,8 +1,9 @@
 package com.petcommerce.shipping.api.controller;
 
-import com.petcommerce.shipping.domain.model.Shipment;
+import com.petcommerce.platform.security.AuthenticatedCaller;
+import com.petcommerce.shipping.api.dto.ShipmentResponse;
+import com.petcommerce.shipping.api.mapper.ShipmentMapper;
 import com.petcommerce.shipping.application.ShippingService;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -11,30 +12,33 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * Read API for shipments. Requires a valid JWT (security.SecurityConfig); the application service checks that the
+ * caller owns the order (or is an admin), so foreign records are rejected with 403 (R-SEC-04).
+ */
 @RestController
 @RequestMapping("/api/v1")
 public class ShippingController {
 
-    private final ShippingService shippingService;
+    private final ShippingService service;
 
-    public ShippingController(ShippingService shippingService) {
-        this.shippingService = shippingService;
+    public ShippingController(ShippingService service) {
+        this.service = service;
     }
 
     @GetMapping("/shipments/order/{orderId}")
-    public ResponseEntity<Shipment> getShipmentByOrderId(@PathVariable Long orderId) {
-        return shippingService.getShipmentByOrderId(orderId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ShipmentResponse getByOrderId(AuthenticatedCaller caller, @PathVariable Long orderId) {
+        return service.getForOrder(orderId, caller);
     }
 
     @GetMapping("/shipments/customer/{customerId}")
-    public ResponseEntity<List<Shipment>> getShipmentsForCustomer(@PathVariable Long customerId) {
-        return ResponseEntity.ok(shippingService.getShipmentsByCustomerId(customerId));
+    public List<ShipmentResponse> getForCustomer(AuthenticatedCaller caller, @PathVariable Long customerId) {
+        return service.getForCustomer(customerId, caller);
     }
 
+    /** Admin only (security.SecurityConfig). */
     @PutMapping("/shipments/order/{orderId}/delivered")
-    public ResponseEntity<Shipment> markShipmentDelivered(@PathVariable Long orderId) {
-        return ResponseEntity.ok(shippingService.markDelivered(orderId));
+    public ShipmentResponse markDelivered(@PathVariable Long orderId) {
+        return ShipmentMapper.toResponse(service.markDelivered(orderId));
     }
 }

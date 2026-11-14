@@ -14,6 +14,7 @@ public record PetReservedEvent(
         Long orderId,
         UUID reservationId,
         UUID petId,
-        BigDecimal totalAmount
+        BigDecimal totalAmount,
+        Long customerId
 ) {
 }

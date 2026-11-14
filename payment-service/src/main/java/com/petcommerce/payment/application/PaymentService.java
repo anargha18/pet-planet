@@ -1,5 +1,9 @@
 package com.petcommerce.payment.application;
 
+import com.petcommerce.platform.security.AuthenticatedCaller;
+import com.petcommerce.payment.api.dto.PaymentResponse;
+import com.petcommerce.payment.api.mapper.PaymentMapper;
+import com.petcommerce.payment.domain.exception.PaymentNotFoundException;
 import com.petcommerce.payment.domain.model.Payment;
 import com.petcommerce.payment.domain.model.PaymentStatus;
 import com.petcommerce.payment.messaging.event.PaymentFailedEvent;
@@ -57,6 +61,15 @@ public class PaymentService {
         this.paymentGateway = paymentGateway;
     }
 
+
+    /** The payment of one order: 404 if none, 403 unless the caller owns the order or is an admin (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public PaymentResponse getForOrder(Long orderId, AuthenticatedCaller caller) {
+        Payment record = getPaymentByOrderId(orderId).orElseThrow(() -> new PaymentNotFoundException(orderId));
+        caller.requireAccessTo(record.getCustomerId());
+        return PaymentMapper.toResponse(record);
+    }
+
     @Transactional(readOnly = true)
     public Optional<Payment> getPaymentByOrderId(Long orderId) {
         return paymentRepository.findByOrderId(orderId);
@@ -88,7 +101,7 @@ public class PaymentService {
             return existing;
         }
 
-        Payment payment = new Payment(event.orderId(), event.totalAmount(), CURRENCY, PaymentStatus.PROCESSING, null);
+        Payment payment = new Payment(event.orderId(), event.customerId(), event.totalAmount(), CURRENCY, PaymentStatus.PROCESSING, null);
         paymentRepository.save(payment);
 
         PaymentGateway.ChargeResult result = paymentGateway.charge(event.orderId(), event.totalAmount());
