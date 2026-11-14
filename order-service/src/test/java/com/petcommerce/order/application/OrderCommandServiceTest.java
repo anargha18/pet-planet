@@ -175,7 +175,7 @@ class OrderCommandServiceTest {
         order.setId(13L);
         Long customerId = 7L;
         order.setCustomerId(customerId);
-        order.setStatus(OrderStatus.PAID);
+        order.setStatus(OrderStatus.CONFIRMED);
         when(orderRepository.findById(13L)).thenReturn(java.util.Optional.of(order));
 
         Authentication auth = authenticatedUser("7", "USER");

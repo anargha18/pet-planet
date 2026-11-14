@@ -13,6 +13,7 @@ import com.petcommerce.order.domain.model.Order;
 import com.petcommerce.order.domain.model.OrderItem;
 import com.petcommerce.order.domain.model.OrderStatus;
 import com.petcommerce.order.domain.model.Species;
+import com.petcommerce.order.domain.policy.OrderStateMachine;
 import com.petcommerce.order.messaging.publisher.OrderEventPublisher;
 import com.petcommerce.order.persistence.repository.OrderRepository;
 import com.petcommerce.order.security.OrderAccessPolicy;
@@ -105,12 +106,12 @@ public class OrderCommandService {
     public OrderResponse cancel(Long orderId, Authentication authentication) {
         Order order = findOrder(orderId);
         orderAccessPolicy.checkCanAccess(order, authentication);
-        if (order.getStatus() != OrderStatus.CREATED && order.getStatus() != OrderStatus.PAYMENT_PENDING) {
+        if (!OrderStateMachine.canTransition(order.getStatus(), OrderStatus.CANCELLED)) {
             throw new InvalidOrderStateException(orderId, order.getStatus().name());
         }
         order.setStatus(OrderStatus.CANCELLED);
         Order updated = orderRepository.save(order);
-        orderEventPublisher.publishOrderCancelled(updated);
+        orderEventPublisher.publishOrderCancelled(updated, "CUSTOMER_CANCELLED");
         log.info("Cancelled order {} and queued OrderCancelledEvent", updated.getId());
         return OrderMapper.toResponse(updated);
     }

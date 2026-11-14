@@ -23,6 +23,11 @@ public class KafkaConfig {
     }
 
     @Bean
+    NewTopic orderFailedEventsTopic() {
+        return TopicBuilder.name("order-failed-events").partitions(1).replicas(1).build();
+    }
+
+    @Bean
     NewTopic orderConfirmedEventsTopic() {
         return TopicBuilder.name("order-confirmed-events").partitions(1).replicas(1).build();
     }

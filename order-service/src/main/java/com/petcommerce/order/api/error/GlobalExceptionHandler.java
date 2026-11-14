@@ -5,12 +5,12 @@ import com.petcommerce.order.domain.exception.OrderNotFoundException;
 import com.petcommerce.order.domain.exception.PetCatalogUnavailableException;
 import com.petcommerce.order.domain.exception.PetNotFoundException;
 import com.petcommerce.order.domain.exception.PetUnavailableException;
-
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -61,6 +61,13 @@ public class GlobalExceptionHandler {
                 .toList();
         log.warn("Validation failed: method={}, path={}, details={}", request.getMethod(), request.getRequestURI(), details);
         return buildResponse(HttpStatus.BAD_REQUEST, "Request validation failed", details);
+    }
+
+    /** Malformed or unreadable JSON body: a client error (400), not a server error. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        log.warn("Unreadable request body: method={}, path={}", request.getMethod(), request.getRequestURI());
+        return buildResponse(HttpStatus.BAD_REQUEST, "Request body is not valid JSON for this endpoint", List.of(request.getRequestURI()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

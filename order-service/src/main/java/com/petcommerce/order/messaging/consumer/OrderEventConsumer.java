@@ -1,10 +1,11 @@
 package com.petcommerce.order.messaging.consumer;
 
 import com.petcommerce.order.messaging.event.PaymentFailedEvent;
-import com.petcommerce.order.messaging.event.PaymentSucceededEvent;
+import com.petcommerce.order.messaging.event.InventorySaleConflictEvent;
 import com.petcommerce.order.messaging.event.PetReservationExpiredEvent;
 import com.petcommerce.order.messaging.event.PetReservationFailedEvent;
 import com.petcommerce.order.messaging.event.PetReservedEvent;
+import com.petcommerce.order.messaging.event.PetsSoldEvent;
 import com.petcommerce.order.application.OrderSagaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,10 +41,16 @@ public class OrderEventConsumer {
         orderSagaService.handlePetReservationExpired(event);
     }
 
-    @KafkaListener(topics = "payment-succeeded-events", groupId = "order-service")
-    public void onPaymentSucceeded(PaymentSucceededEvent event) {
-        log.info("Received PaymentSucceededEvent for order {} with payment {}", event.orderId(), event.paymentId());
-        orderSagaService.handlePaymentSucceeded(event);
+    @KafkaListener(topics = "pets-sold-events", groupId = "order-service")
+    public void onPetsSold(PetsSoldEvent event) {
+        log.info("Received PetsSoldEvent for order {} ({} pets)", event.orderId(), event.petIds().size());
+        orderSagaService.handlePetsSold(event);
+    }
+
+    @KafkaListener(topics = "inventory-sale-conflict-events", groupId = "order-service")
+    public void onSaleConflict(InventorySaleConflictEvent event) {
+        log.warn("Received InventorySaleConflictEvent for order {}: {}", event.orderId(), event.reason());
+        orderSagaService.handleSaleConflict(event);
     }
 
     @KafkaListener(topics = "payment-failed-events", groupId = "order-service")
