@@ -53,6 +53,12 @@ public class Payment {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
+    @Column(name = "refund_reason", length = 64)
+    private String refundReason;
+
     @Version
     private long version;
 
@@ -125,5 +131,24 @@ public class Payment {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Instant getRefundedAt() {
+        return refundedAt;
+    }
+
+    public String getRefundReason() {
+        return refundReason;
+    }
+
+    /** Marks a successful payment as refunded (the order was cancelled or failed). */
+    public void refund(String reason, String refundReference) {
+        if (status != PaymentStatus.SUCCEEDED) {
+            throw new IllegalStateException("Only a SUCCEEDED payment can be refunded; payment " + paymentId + " is " + status);
+        }
+        this.status = PaymentStatus.REFUNDED;
+        this.refundReason = reason;
+        this.refundedAt = Instant.now();
+        this.transactionReference = refundReference;
     }
 }
