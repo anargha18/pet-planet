@@ -10,10 +10,12 @@ import com.petcommerce.order.domain.model.Species;
 import com.petcommerce.order.domain.exception.InvalidOrderStateException;
 import com.petcommerce.order.domain.exception.OrderNotFoundException;
 import com.petcommerce.order.domain.exception.PetCatalogUnavailableException;
-import com.petcommerce.order.security.JwtService;
 import com.petcommerce.order.application.OrderCommandService;
 import com.petcommerce.order.application.OrderQueryService;
+import com.petcommerce.platform.security.TestJwtIssuer;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -56,8 +58,10 @@ class OrderControllerTest {
     @MockBean
     private PetCatalogClient petCatalogClient;
 
-    @MockBean
-    private JwtService jwtService;
+    @DynamicPropertySource
+    static void jwt(DynamicPropertyRegistry registry) {
+        registry.add("jwt.public-key", TestJwtIssuer::publicKeyBase64);
+    }
 
     @Test
     void createOrderReturnsCreated() throws Exception {
@@ -153,5 +157,38 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"items\":[\"petId\"]}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void requestWithoutTokenIs401WithSharedErrorBody() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.path").value("/api/v1/orders/1"));
+    }
+
+    @Test
+    void realSignedTokenIsAcceptedAndCallerIsTheTokenSubject() throws Exception {
+        var orderResponse = new com.petcommerce.order.api.dto.OrderResponse(
+                1L, 7L, OrderStatus.CREATED, BigDecimal.ONE, List.of(), java.time.Instant.now(), java.time.Instant.now());
+        Mockito.when(orderQueryService.getOrder(eq(1L), Mockito.argThat(auth -> "7".equals(auth.getName()))))
+                .thenReturn(orderResponse);
+
+        mockMvc.perform(get("/api/v1/orders/1")
+                        .header("Authorization", "Bearer " + TestJwtIssuer.userToken(7)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value(7));
+    }
+
+    @Test
+    void notFoundUsesSharedErrorBody() throws Exception {
+        Mockito.when(orderQueryService.getOrder(eq(404L), any())).thenThrow(new OrderNotFoundException(404L));
+
+        mockMvc.perform(get("/api/v1/orders/404").with(user("7").roles("USER")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.correlationId").exists());
     }
 }

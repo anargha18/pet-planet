@@ -1,5 +1,6 @@
 package com.petcommerce.inventory.application;
 
+import com.petcommerce.inventory.domain.exception.PetInventoryNotFoundException;
 import com.petcommerce.inventory.domain.model.InventoryStatus;
 import com.petcommerce.inventory.domain.model.PetInventory;
 import com.petcommerce.inventory.messaging.event.InventorySaleConflictEvent;
@@ -125,7 +126,7 @@ public class InventoryService {
         eventPublisher.publish(
                 PET_RESERVED_TOPIC,
                 primaryPetId.toString(),
-                new PetReservedEvent(UUID.randomUUID(), "PetReservedEvent", 1, event.aggregateId(), now, event.correlationId(), event.orderId(), orderReservationId, primaryPetId, event.totalAmount()),
+                new PetReservedEvent(UUID.randomUUID(), "PetReservedEvent", 1, event.aggregateId(), now, event.correlationId(), event.orderId(), orderReservationId, primaryPetId, event.totalAmount(), event.customerId()),
                 "PetReservedEvent",
                 primaryPetId,
                 event.orderId(),
@@ -262,11 +263,11 @@ public class InventoryService {
         }
     }
 
-    /** Current inventory state; a pet with no inventory row is reported as AVAILABLE (existing behavior). */
+    /** Current inventory state; an unknown pet is a 404 (R-SEC-06), not a made-up AVAILABLE row. */
     @Transactional(readOnly = true)
     public PetInventory getPetStatus(UUID petId) {
         return petInventoryRepository.findByPetId(petId)
-                .orElseGet(() -> new PetInventory(petId));
+                .orElseThrow(() -> new PetInventoryNotFoundException(petId));
     }
 
     @Scheduled(fixedDelayString = "${inventory.expiration-check-delay-ms:30000}")

@@ -56,3 +56,9 @@ springdoc:
 logging:
   pattern:
     level: "%5p [corr=%X{correlationId:-}]"
+
+# Token validation (platform-commons): public key only. No default: run scripts/generate-dev-keys.sh.
+jwt:
+  public-key: ${JWT_PUBLIC_KEY:}
+  issuer: ${JWT_ISSUER:pet-planet}
+  audience: ${JWT_AUDIENCE:pet-planet}

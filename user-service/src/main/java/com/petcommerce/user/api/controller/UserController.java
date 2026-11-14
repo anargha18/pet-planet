@@ -6,12 +6,17 @@ import com.petcommerce.user.api.dto.UpdateProfileRequest;
 import com.petcommerce.user.api.dto.UpdateUserRequest;
 import com.petcommerce.user.api.dto.UserResponse;
 import com.petcommerce.user.application.UserService;
+import com.petcommerce.platform.security.AuthenticatedCaller;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Self-service profile ({@code /me}, any valid token; the user ID comes from the verified JWT) and user
+ * administration (ROLE_ADMIN, enforced in {@code security.SecurityConfig}).
+ */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
@@ -23,25 +28,25 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public UserResponse me(@RequestHeader("X-Authenticated-User-Id") Integer userId) {
-        return userService.findActiveById(userId);
+    public UserResponse me(AuthenticatedCaller caller) {
+        return userService.findActiveById(userIdOf(caller));
     }
 
     @PatchMapping("/me")
     public UserResponse updateMe(
-            @RequestHeader("X-Authenticated-User-Id") Integer userId,
+            AuthenticatedCaller caller,
             @Valid @RequestBody UpdateProfileRequest request
     ) {
-        return userService.updateProfile(userId, request);
+        return userService.updateProfile(userIdOf(caller), request);
     }
 
     @PutMapping("/me/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changeMyPassword(
-            @RequestHeader("X-Authenticated-User-Id") Integer userId,
+            AuthenticatedCaller caller,
             @Valid @RequestBody ChangePasswordRequest request
     ) {
-        userService.changePassword(userId, request);
+        userService.changePassword(userIdOf(caller), request);
     }
 
     @GetMapping
@@ -69,5 +74,9 @@ public class UserController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteUser(@PathVariable Integer id) {
         userService.deactivate(id);
+    }
+
+    private static Integer userIdOf(AuthenticatedCaller caller) {
+        return Math.toIntExact(caller.userId());
     }
 }

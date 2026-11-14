@@ -1,5 +1,9 @@
 package com.petcommerce.shipping.application;
 
+import com.petcommerce.platform.security.AuthenticatedCaller;
+import com.petcommerce.shipping.api.dto.ShipmentResponse;
+import com.petcommerce.shipping.api.mapper.ShipmentMapper;
+import com.petcommerce.shipping.domain.exception.ShipmentNotFoundException;
 import com.petcommerce.shipping.domain.model.Shipment;
 import com.petcommerce.shipping.domain.model.ShipmentStatus;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
@@ -36,6 +40,22 @@ public class ShippingService {
         this.eventPublisher = eventPublisher;
     }
 
+
+    /** The shipment of one order: 404 if none, 403 unless the caller owns the order or is an admin (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public ShipmentResponse getForOrder(Long orderId, AuthenticatedCaller caller) {
+        Shipment record = getShipmentByOrderId(orderId).orElseThrow(() -> new ShipmentNotFoundException(orderId));
+        caller.requireAccessTo(record.getCustomerId());
+        return ShipmentMapper.toResponse(record);
+    }
+
+    /** All shipments of a customer: users may only ask for their own, admins for anyone (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public List<ShipmentResponse> getForCustomer(Long customerId, AuthenticatedCaller caller) {
+        caller.requireAccessTo(customerId);
+        return getShipmentsByCustomerId(customerId).stream().map(ShipmentMapper::toResponse).toList();
+    }
+
     public Optional<Shipment> getShipmentByOrderId(Long orderId) {
         return shipmentRepository.findByOrderId(orderId);
     }
@@ -47,7 +67,7 @@ public class ShippingService {
     @Transactional
     public Shipment markDelivered(Long orderId) {
         Shipment shipment = shipmentRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("No shipment found for order " + orderId));
+                .orElseThrow(() -> new ShipmentNotFoundException(orderId));
         shipment.setStatus(ShipmentStatus.DELIVERED);
         shipment.setDeliveredAt(Instant.now());
         return shipmentRepository.save(shipment);

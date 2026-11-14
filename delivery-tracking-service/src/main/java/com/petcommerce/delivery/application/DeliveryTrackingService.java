@@ -1,5 +1,9 @@
 package com.petcommerce.delivery.application;
 
+import com.petcommerce.platform.security.AuthenticatedCaller;
+import com.petcommerce.delivery.api.dto.DeliveryResponse;
+import com.petcommerce.delivery.api.mapper.DeliveryRecordMapper;
+import com.petcommerce.delivery.domain.exception.DeliveryNotFoundException;
 import com.petcommerce.delivery.domain.model.DeliveryRecord;
 import com.petcommerce.delivery.domain.model.DeliveryStatus;
 import com.petcommerce.delivery.messaging.event.DeliveryStatusUpdatedEvent;
@@ -34,6 +38,22 @@ public class DeliveryTrackingService {
         this.deliveryRecordRepository = deliveryRecordRepository;
         this.processedEventRepository = processedEventRepository;
         this.eventPublisher = eventPublisher;
+    }
+
+
+    /** The delivery of one order: 404 if none, 403 unless the caller owns the order or is an admin (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public DeliveryResponse getForOrder(Long orderId, AuthenticatedCaller caller) {
+        DeliveryRecord record = getDeliveryByOrderId(orderId).orElseThrow(() -> new DeliveryNotFoundException(orderId));
+        caller.requireAccessTo(record.getCustomerId());
+        return DeliveryRecordMapper.toResponse(record);
+    }
+
+    /** All deliverys of a customer: users may only ask for their own, admins for anyone (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public List<DeliveryResponse> getForCustomer(Long customerId, AuthenticatedCaller caller) {
+        caller.requireAccessTo(customerId);
+        return getDeliveriesByCustomerId(customerId).stream().map(DeliveryRecordMapper::toResponse).toList();
     }
 
     public Optional<DeliveryRecord> getDeliveryByOrderId(Long orderId) {
@@ -92,7 +112,7 @@ public class DeliveryTrackingService {
     @Transactional
     public DeliveryRecord markDelivered(Long orderId) {
         DeliveryRecord delivery = deliveryRecordRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("No delivery found for order " + orderId));
+                .orElseThrow(() -> new DeliveryNotFoundException(orderId));
 
         delivery.setStatus(DeliveryStatus.DELIVERED);
         deliveryRecordRepository.save(delivery);

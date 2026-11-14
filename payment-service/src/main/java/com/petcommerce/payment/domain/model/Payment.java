@@ -34,6 +34,10 @@ public class Payment {
     @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
 
+    /** Owner of the order (user ID); null only for payments created before V4. Used for ownership checks. */
+    @Column(name = "customer_id")
+    private Long customerId;
+
     @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
@@ -65,9 +69,11 @@ public class Payment {
     protected Payment() {
     }
 
-    public Payment(Long orderId, BigDecimal amount, String currency, PaymentStatus status, String transactionReference) {
+    public Payment(Long orderId, Long customerId, BigDecimal amount, String currency, PaymentStatus status,
+                   String transactionReference) {
         this.paymentId = UUID.randomUUID();
         this.orderId = orderId;
+        this.customerId = customerId;
         this.amount = amount;
         this.currency = currency;
         this.status = status;
@@ -99,6 +105,10 @@ public class Payment {
 
     public Long getOrderId() {
         return orderId;
+    }
+
+    public Long getCustomerId() {
+        return customerId;
     }
 
     public BigDecimal getAmount() {

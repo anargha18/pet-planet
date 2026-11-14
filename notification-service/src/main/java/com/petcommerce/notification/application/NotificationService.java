@@ -1,5 +1,9 @@
 package com.petcommerce.notification.application;
 
+import com.petcommerce.platform.security.AuthenticatedCaller;
+import com.petcommerce.notification.api.dto.NotificationResponse;
+import com.petcommerce.notification.api.mapper.NotificationMapper;
+import com.petcommerce.notification.domain.exception.NotificationNotFoundException;
 import com.petcommerce.notification.domain.model.Notification;
 import com.petcommerce.notification.domain.model.NotificationStatus;
 import com.petcommerce.notification.messaging.event.NotificationSentEvent;
@@ -33,6 +37,22 @@ public class NotificationService {
         this.notificationRepository = notificationRepository;
         this.processedEventRepository = processedEventRepository;
         this.eventPublisher = eventPublisher;
+    }
+
+
+    /** The notification of one order: 404 if none, 403 unless the caller owns the order or is an admin (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public NotificationResponse getForOrder(Long orderId, AuthenticatedCaller caller) {
+        Notification record = getNotificationByOrderId(orderId).orElseThrow(() -> new NotificationNotFoundException(orderId));
+        caller.requireAccessTo(record.getCustomerId());
+        return NotificationMapper.toResponse(record);
+    }
+
+    /** All notifications of a customer: users may only ask for their own, admins for anyone (R-SEC-04). */
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> getForCustomer(Long customerId, AuthenticatedCaller caller) {
+        caller.requireAccessTo(customerId);
+        return getNotificationsByCustomerId(customerId).stream().map(NotificationMapper::toResponse).toList();
     }
 
     public Optional<Notification> getNotificationByOrderId(Long orderId) {
