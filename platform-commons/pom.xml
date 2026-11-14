@@ -12,8 +12,11 @@
     </parent>
 
     <!--
-      Shared INFRASTRUCTURE library (DEC-3): Kafka conventions and the transactional-outbox relay.
+      Shared INFRASTRUCTURE library (DEC-3): Kafka conventions, the transactional-outbox relay, and (Phase 3)
+      the JWT resource-server setup, the shared error body and HTTP correlation IDs.
       Rules: no domain types, no event classes, no service-specific code. Services share JSON contracts, not classes.
+      Framework dependencies are optional: each auto-configuration switches on only when the service itself
+      has the matching library (Kafka, Spring MVC, Spring Security) on its classpath.
     -->
     <groupId>com.petcommerce</groupId>
     <artifactId>platform-commons</artifactId>
@@ -33,10 +36,22 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -58,6 +73,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
@@ -73,4 +93,21 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Publishes TestJwtIssuer (src/test) as a test-jar so services can sign real tokens in their tests. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

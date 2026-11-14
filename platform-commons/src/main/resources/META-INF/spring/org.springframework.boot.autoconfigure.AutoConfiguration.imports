@@ -1,2 +1,4 @@
 com.petcommerce.platform.kafka.KafkaPlatformAutoConfiguration
 com.petcommerce.platform.outbox.OutboxAutoConfiguration
+com.petcommerce.platform.web.PlatformWebAutoConfiguration
+com.petcommerce.platform.security.PlatformSecurityAutoConfiguration

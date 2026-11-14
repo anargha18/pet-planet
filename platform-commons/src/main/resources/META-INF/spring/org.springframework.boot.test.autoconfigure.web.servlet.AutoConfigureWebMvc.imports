@@ -1,0 +1,2 @@
+com.petcommerce.platform.web.PlatformWebAutoConfiguration
+com.petcommerce.platform.security.PlatformSecurityAutoConfiguration
