@@ -2,13 +2,15 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down reset infra kafka-ui build logs ps test smoke frontend-check
+.PHONY: help keys up down reset infra kafka-ui build logs ps test smoke frontend-check
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-up: ## Build and start the whole stack; waits until every service is healthy
-	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
+keys: ## Create .env and generate local secrets (JWT key pair, internal token); keeps existing ones
+	scripts/generate-dev-keys.sh
+
+up: keys ## Build and start the whole stack; waits until every service is healthy
 	$(COMPOSE) up -d --build --wait --wait-timeout 600
 	@echo "Storefront: http://localhost:5173   API gateway: http://localhost:8089"
 
@@ -19,8 +21,7 @@ reset: ## Stop the stack and DELETE all local data (Postgres + Kafka volumes), t
 	$(COMPOSE) --profile tools down -v
 	$(MAKE) up
 
-infra: ## Start only Postgres and Kafka (run services from your IDE against them)
-	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
+infra: keys ## Start only Postgres and Kafka (run services from your IDE against them)
 	$(COMPOSE) up -d --wait --wait-timeout 300 postgres kafka
 	@echo "Postgres: localhost:5432   Kafka: localhost:9092"
 

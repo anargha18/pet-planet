@@ -12,6 +12,13 @@ x-java-service: &java-service
   networks:
     - pet-planet
 
+# Token validation settings for every Spring service (R-SEC-02): public key only. Generate the key pair and the
+# internal token into .env with scripts/generate-dev-keys.sh (make up does it on first run). No keys are committed.
+x-jwt-verify-env: &jwt-verify-env
+  JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is not set - run scripts/generate-dev-keys.sh}
+  JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
+  JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
+
 x-health-timing: &health-timing
   interval: 10s
   timeout: 5s
@@ -112,17 +119,15 @@ services:
       dockerfile: user-service/Dockerfile
     container_name: pet-planet-user
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       USER_SERVICE_PORT: 8088
       USER_DATABASE_URL: jdbc:postgresql://postgres:5432/${USER_DATABASE_NAME:-petplanet_user}
       USER_DATABASE_USERNAME: ${USER_DATABASE_USERNAME:-petplanet_user}
       USER_DATABASE_PASSWORD: ${USER_DATABASE_PASSWORD:-admin123}
-      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
+      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:?USER_SERVICE_INTERNAL_TOKEN is not set - run scripts/generate-dev-keys.sh}
       # user-service issues tokens: it is the only service that receives the private signing key.
-      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY must be configured}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY is not set - run scripts/generate-dev-keys.sh}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
     healthcheck:
       <<: *health-timing
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/actuator/health || exit 1"]
@@ -137,16 +142,12 @@ services:
       dockerfile: pet-catalog-service/Dockerfile
     container_name: pet-planet-catalog
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       SERVER_PORT: 8080
       CATALOG_DATABASE_URL: jdbc:postgresql://postgres:5432/${CATALOG_DATABASE_NAME:-petplanet_catalog}
       CATALOG_DATABASE_USERNAME: ${CATALOG_DATABASE_USERNAME:-petplanet_catalog}
       CATALOG_DATABASE_PASSWORD: ${CATALOG_DATABASE_PASSWORD:-admin123}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
     healthcheck:
       <<: *health-timing
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
@@ -159,17 +160,13 @@ services:
       dockerfile: order-service/Dockerfile
     container_name: pet-planet-order
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       ORDER_SERVICE_PORT: 8081
       ORDER_DATABASE_URL: jdbc:postgresql://postgres:5432/${ORDER_DATABASE_NAME:-petplanet_order}
       ORDER_DATABASE_USERNAME: ${ORDER_DATABASE_USERNAME:-petplanet_order}
       ORDER_DATABASE_PASSWORD: ${ORDER_DATABASE_PASSWORD:-admin123}
       PET_CATALOG_URL: http://pet-catalog-service:8080
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
     healthcheck:
       <<: *health-timing
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]
@@ -185,7 +182,7 @@ services:
       dockerfile: inventory-service/Dockerfile
     container_name: pet-planet-inventory
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       INVENTORY_SERVICE_PORT: 8082
       INVENTORY_DATABASE_URL: jdbc:postgresql://postgres:5432/${INVENTORY_DATABASE_NAME:-petplanet_inventory}
       INVENTORY_DATABASE_USERNAME: ${INVENTORY_DATABASE_USERNAME:-petplanet_inventory}
@@ -193,10 +190,6 @@ services:
       INVENTORY_RESERVATION_TIMEOUT: ${INVENTORY_RESERVATION_TIMEOUT:-PT5M}
       INVENTORY_EXPIRATION_CHECK_DELAY_MS: ${INVENTORY_EXPIRATION_CHECK_DELAY_MS:-30000}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
     healthcheck:
       <<: *health-timing
       test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
@@ -209,7 +202,7 @@ services:
       dockerfile: payment-service/Dockerfile
     container_name: pet-planet-payment
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       PAYMENT_SERVICE_PORT: 8083
       PAYMENT_DATABASE_URL: jdbc:postgresql://postgres:5432/${PAYMENT_DATABASE_NAME:-petplanet_payment}
       PAYMENT_DATABASE_USERNAME: ${PAYMENT_DATABASE_USERNAME:-petplanet_payment}
@@ -229,7 +222,7 @@ services:
       dockerfile: notification-service/Dockerfile
     container_name: pet-planet-notification
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       NOTIFICATION_SERVICE_PORT: 8084
       NOTIFICATION_DATABASE_URL: jdbc:postgresql://postgres:5432/${NOTIFICATION_DATABASE_NAME:-petplanet_notification}
       NOTIFICATION_DATABASE_USERNAME: ${NOTIFICATION_DATABASE_USERNAME:-petplanet_notification}
@@ -247,7 +240,7 @@ services:
       dockerfile: shipping-service/Dockerfile
     container_name: pet-planet-shipping
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       SHIPPING_SERVICE_PORT: 8085
       SHIPPING_DATABASE_URL: jdbc:postgresql://postgres:5432/${SHIPPING_DATABASE_NAME:-petplanet_shipping}
       SHIPPING_DATABASE_USERNAME: ${SHIPPING_DATABASE_USERNAME:-petplanet_shipping}
@@ -265,7 +258,7 @@ services:
       dockerfile: delivery-tracking-service/Dockerfile
     container_name: pet-planet-delivery
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       DELIVERY_SERVICE_PORT: 8086
       DELIVERY_DATABASE_URL: jdbc:postgresql://postgres:5432/${DELIVERY_DATABASE_NAME:-petplanet_delivery}
       DELIVERY_DATABASE_USERNAME: ${DELIVERY_DATABASE_USERNAME:-petplanet_delivery}
@@ -283,7 +276,7 @@ services:
       dockerfile: fulfillment-service/Dockerfile
     container_name: pet-planet-fulfillment
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       FULFILLMENT_SERVICE_PORT: 8087
       FULFILLMENT_DATABASE_URL: jdbc:postgresql://postgres:5432/${FULFILLMENT_DATABASE_NAME:-petplanet_fulfillment}
       FULFILLMENT_DATABASE_USERNAME: ${FULFILLMENT_DATABASE_USERNAME:-petplanet_fulfillment}
@@ -301,7 +294,7 @@ services:
       dockerfile: gateway-service/Dockerfile
     container_name: pet-planet-gateway
     environment:
-      <<: *java-env
+      <<: [*java-env, *jwt-verify-env]
       GATEWAY_PORT: 8089
       USER_SERVICE_URL: http://user-service:8088
       PET_CATALOG_URL: http://pet-catalog-service:8080
@@ -313,10 +306,7 @@ services:
       DELIVERY_SERVICE_URL: http://delivery-tracking-service:8086
       FULFILLMENT_SERVICE_URL: http://fulfillment-service:8087
       # The gateway only validates tokens: it receives the public key, never the private one.
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be configured}
-      JWT_ISSUER: ${JWT_ISSUER:-pet-planet}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-pet-planet}
-      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
+      USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:?USER_SERVICE_INTERNAL_TOKEN is not set - run scripts/generate-dev-keys.sh}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "${GATEWAY_PORT:-8089}:8089"
