@@ -11,9 +11,9 @@ Pet Planet consists of ten Spring Boot services (`gateway-service` plus nine dom
 | React storefront (`frontend`) | 5173 | Catalog browsing, species filtering, login/registration, browser-local cart, checkout, and order/shipment tracking (`/orders`). Calls `gateway-service` (`:8089`). |
 | API Gateway (`gateway-service`) | 8089 | Public application entrypoint; RS256 JWT validation (public key only), edge role authorization, routing, and CORS. Login/registration pass through to user-service. |
 | Pet catalog (`pet-catalog-service`) | 8080 | Pet CRUD/search REST API; emits `PetCreatedEvent` (`pet-catalog-events`); consumes `inventory-status-events` to keep `availabilityStatus` (`AVAILABLE`, `RESERVED`, `SOLD`) synchronized. |
-| Order (`order-service`) | 8081 | Persists order and item snapshots; reads catalog over REST; emits `order-created-events`, `order-cancelled-events`, and `order-confirmed-events`; consumes reservation and payment result events. |
-| Inventory (`inventory-service`) | 8082 | Unique pet availability, atomic multi-pet reservation, 5-minute expiry scheduler, and sold-state tracking. Consumes `order-created-events`, `order-confirmed-events`, `order-cancelled-events`, `payment-failed-events`, and `pet-catalog-events`. Emits reservation outcomes and `inventory-status-events`. |
-| Payment (`payment-service`) | 8083 | Consumes `pet-reserved-events`, charges the actual order `totalAmount`, emits `payment-succeeded-events` or `payment-failed-events`, and exposes `GET /api/v1/payments/order/{orderId}`. |
+| Order (`order-service`) | 8081 | Persists order and item snapshots; reads catalog over REST; emits `order-created-events`, `order-confirmed-events`, `order-cancelled-events` and `order-failed-events`; consumes reservation results, `payment-failed-events`, `pets-sold-events` and `inventory-sale-conflict-events`. Order status changes only through `OrderStateMachine`. |
+| Inventory (`inventory-service`) | 8082 | Source of truth for pet availability (`AVAILABLE`, `RESERVED`, `SOLD`, `RETIRED`): all-or-nothing reservation, expiry scheduler (`INVENTORY_RESERVATION_TIMEOUT`, default 5 minutes), and completing the sale on payment. Consumes `order-created-events`, `payment-succeeded-events`, `order-cancelled-events`, `order-failed-events` and `pet-catalog-events`. Emits reservation outcomes, `pets-sold-events`, `inventory-sale-conflict-events` and `inventory-status-events`. |
+| Payment (`payment-service`) | 8083 | Consumes `pet-reserved-events` and charges the order `totalAmount` through a `PaymentGateway` (simulated). Consumes `order-cancelled-events` and `order-failed-events` to refund a successful charge or block a later one. Emits `payment-succeeded-events`, `payment-failed-events` and `payment-refunded-events`; exposes `GET /api/v1/payments/order/{orderId}`. |
 | Notification (`notification-service`) | 8084 | Consumes `order-confirmed-events`, stores notification records with the order's `customerId`, emits `notification-sent-events`, and exposes lookup endpoints. |
 | Shipping (`shipping-service`) | 8085 | Consumes `order-confirmed-events`, creates shipment and tracking number with the order's `customerId`, emits `shipment-created-events`, and exposes lookup and manual delivered endpoints. |
 | Delivery tracking (`delivery-tracking-service`) | 8086 | Consumes `shipment-created-events`, creates `IN_TRANSIT` delivery record, emits `delivery-status-updated-events`, and supports `PUT /api/v1/deliveries/order/{orderId}/delivered`. |
@@ -54,15 +54,17 @@ flowchart LR
   Kafka -.->|inventory-status-events| Catalog
 
   Orders -.->|order-created / cancelled| Kafka
-  Kafka -.->|order-created / cancelled| Inventory
+  Kafka -.->|order-created / cancelled / failed| Inventory
   Inventory -.->|pet-reserved / failed / expired| Kafka
   Kafka -.->|pet-reserved| Payment
   Kafka -.->|pet-reserved / failed / expired| Orders
-  Payment -.->|payment-succeeded / failed| Kafka
-  Kafka -.->|payment-succeeded / failed| Orders
-  Kafka -.->|payment-failed| Inventory
-  Orders -.->|order-confirmed-events| Kafka
-  Kafka -.->|order-confirmed-events| Inventory
+  Payment -.->|payment-succeeded / failed / refunded| Kafka
+  Kafka -.->|payment-failed| Orders
+  Kafka -.->|payment-succeeded| Inventory
+  Inventory -.->|pets-sold / sale-conflict| Kafka
+  Kafka -.->|pets-sold / sale-conflict| Orders
+  Orders -.->|order-confirmed / cancelled / failed| Kafka
+  Kafka -.->|order-cancelled / failed| Payment
   Kafka -.->|order-confirmed-events| Notifications
   Kafka -.->|order-confirmed-events| Shipping
   Shipping -.->|shipment-created-events| Kafka
@@ -74,19 +76,27 @@ flowchart LR
 ## End-to-End Business Workflows
 
 ### 1. Happy-path checkout saga
-1. Authenticated customer submits cart items to `POST /api/v1/orders` via `gateway-service`.
-2. `order-service` reads the signed integer `userId` claim from the authenticated token and stores it as `customerId`, validates each pet via `pet-catalog-service`, saves the `Order` (`status = CREATED`), and writes `OrderCreatedEvent` (with `orderId`, `customerId`, `petIds`, and `totalAmount`) to `order_outbox`.
-3. `inventory-service` consumes `OrderCreatedEvent`, verifies all pets in the order are `AVAILABLE`, reserves them (`status = RESERVED`, `orderId` recorded, 5-minute TTL), emits `InventoryStatusChangedEvent` (`RESERVED`) to update `pet-catalog-service`, and emits `PetReservedEvent` carrying `totalAmount`.
-4. `order-service` consumes `PetReservedEvent` and updates the order status to `PAYMENT_PENDING`.
-5. `payment-service` consumes `PetReservedEvent`, charges the order's actual `totalAmount`, persists the `Payment` (`SUCCEEDED`), and emits `PaymentSucceededEvent`.
-6. `order-service` consumes `PaymentSucceededEvent`, marks the order `PAID`, and emits `OrderConfirmedEvent` (including `customerId`).
-7. `inventory-service` marks the pets `SOLD` and syncs `pet-catalog-service` to `SOLD`; `notification-service` creates a confirmation notification for `customerId`; `shipping-service` generates a tracking number (`PET-{orderId}-...`) and emits `ShipmentCreatedEvent`, which flows through `delivery-tracking-service` (`IN_TRANSIT` -> `DELIVERED`) and updates `fulfillment-service` (`SHIPPED` -> `DELIVERED`).
+1. An authenticated customer submits cart items to `POST /api/v1/orders` via `gateway-service`.
+2. `order-service` stores the token's integer `userId` as `customerId`, validates each pet via `pet-catalog-service` (it must be `AVAILABLE`), saves the order (`CREATED`), and writes `OrderCreatedEvent` (`orderId`, `customerId`, `petIds`, `totalAmount`) to its outbox.
+3. `inventory-service` reserves **all** pets or none. On success: pets `RESERVED` for the order with an expiry time, catalog synced, `PetReservedEvent` with `totalAmount`. Unknown, reserved, sold or retired pets produce `PetReservationFailedEvent`.
+4. `order-service` moves the order to `PAYMENT_PENDING`. In parallel, `payment-service` charges `totalAmount` through its `PaymentGateway` and emits `PaymentSucceededEvent`.
+5. `inventory-service` completes the sale: it marks the pets `SOLD` **only if they are still reserved for that order** and emits `PetsSoldEvent`; the catalog is synced to `SOLD`.
+6. `order-service` confirms the order (`CONFIRMED`) on `PetsSoldEvent` and emits `OrderConfirmedEvent`. Notification and shipping react to it, and shipping → delivery-tracking → fulfillment follow.
 
-### 2. Compensating rollback workflows
-- **Reservation failure**: If any requested pet in an order is already `RESERVED` or `SOLD`, `inventory-service` aborts the reservation and emits `PetReservationFailedEvent`; `order-service` consumes it and marks the order `FAILED`.
-- **Reservation timeout (5 minutes)**: `inventory-service`'s `@Scheduled` task (`expireReservations()`) releases expired reservations back to `AVAILABLE`, syncs `pet-catalog-service`, and emits `PetReservationExpiredEvent` with the associated `orderId`; `order-service` marks the order `CANCELLED`.
-- **Payment failure**: `payment-service` emits `PaymentFailedEvent`; `order-service` marks the order `FAILED`, and `inventory-service` consumes `PaymentFailedEvent` to immediately release all reserved pets for that order back to `AVAILABLE` and sync `pet-catalog-service`.
-- **Customer cancellation**: Calling `PATCH /api/v1/orders/{orderId}/cancel` marks the order `CANCELLED` and emits `OrderCancelledEvent`; `inventory-service` consumes it and releases any reserved pets back to `AVAILABLE`.
+Confirmation happens only after the pets are sold. A pet whose reservation expired can therefore never be sold to two orders, and shipping never sees an order that could still fail.
+
+### 2. Compensating workflows
+Every unsuccessful ending publishes an event. Inventory releases the order's reservations (pets still `RESERVED` for that order become `AVAILABLE`). Payment marks the order closed, then refunds a `SUCCEEDED` charge (`REFUNDED` + `PaymentRefundedEvent`) or ensures a later charge never happens.
+
+| Trigger | Order | Event | Inventory | Payment |
+|---|---|---|---|---|
+| Pet unknown / reserved / sold / retired | `FAILED` | `OrderFailedEvent` (`RESERVATION_FAILED:<reason>`) | nothing was reserved | marked closed; never charges |
+| Payment declined | `FAILED` | `OrderFailedEvent` (`PAYMENT_FAILED:<reason>`) | releases | already `FAILED` |
+| Customer cancels (`PATCH /api/v1/orders/{id}/cancel`, while `CREATED`/`PAYMENT_PENDING`) | `CANCELLED` | `OrderCancelledEvent` (`CUSTOMER_CANCELLED`) | releases | refunds if charged, otherwise blocks the charge |
+| Reservation expires (scheduler) | `CANCELLED` | `OrderCancelledEvent` (`RESERVATION_EXPIRED`) | already released | refunds if charged, otherwise blocks the charge |
+| Payment succeeded after the reservation was lost | `FAILED` (if still open) | `InventorySaleConflictEvent` → `OrderFailedEvent` (`SALE_CONFLICT:<reason>`) | sells nothing | refunds |
+
+Payment serializes the charge and the closing of an order with a per-order PostgreSQL advisory lock: whichever runs second sees the other's result. All of these paths are verified end to end by `scripts/smoke-test.sh`.
 
 ### 3. Transactional Outbox Relay
 All eight event-producing services (`pet-catalog`, `order`, `inventory`, `payment`, `notification`, `shipping`, `delivery-tracking`, `fulfillment`) only **insert an outbox row** inside the business `@Transactional` method. A single shared relay in `platform-commons` (`OutboxRelay`, every 500 ms) locks unpublished rows (`FOR UPDATE SKIP LOCKED`), sends each one as a plain JSON string, waits for the broker acknowledgement, and then sets `published_at`. A failed send records `attempts`/`last_error` and is retried on the next run. Consumers retry failures and then dead-letter them to `<topic>.DLT`; idempotent consumers deduplicate with `processed_events`. Full conventions: [Event catalog](./events.md).
