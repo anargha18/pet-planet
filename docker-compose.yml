@@ -108,7 +108,8 @@ services:
   user-service:
     <<: *java-service
     build:
-      context: ./user-service
+      context: .
+      dockerfile: user-service/Dockerfile
     container_name: pet-planet-user
     environment:
       <<: *java-env
@@ -132,7 +133,8 @@ services:
   pet-catalog-service:
     <<: *java-service
     build:
-      context: ./pet-catalog-service
+      context: .
+      dockerfile: pet-catalog-service/Dockerfile
     container_name: pet-planet-catalog
     environment:
       <<: *java-env
@@ -153,7 +155,8 @@ services:
   order-service:
     <<: *java-service
     build:
-      context: ./order-service
+      context: .
+      dockerfile: order-service/Dockerfile
     container_name: pet-planet-order
     environment:
       <<: *java-env
@@ -178,7 +181,8 @@ services:
   inventory-service:
     <<: *java-service
     build:
-      context: ./inventory-service
+      context: .
+      dockerfile: inventory-service/Dockerfile
     container_name: pet-planet-inventory
     environment:
       <<: *java-env
@@ -199,7 +203,8 @@ services:
   payment-service:
     <<: *java-service
     build:
-      context: ./payment-service
+      context: .
+      dockerfile: payment-service/Dockerfile
     container_name: pet-planet-payment
     environment:
       <<: *java-env
@@ -217,7 +222,8 @@ services:
   notification-service:
     <<: *java-service
     build:
-      context: ./notification-service
+      context: .
+      dockerfile: notification-service/Dockerfile
     container_name: pet-planet-notification
     environment:
       <<: *java-env
@@ -234,7 +240,8 @@ services:
   shipping-service:
     <<: *java-service
     build:
-      context: ./shipping-service
+      context: .
+      dockerfile: shipping-service/Dockerfile
     container_name: pet-planet-shipping
     environment:
       <<: *java-env
@@ -251,7 +258,8 @@ services:
   delivery-tracking-service:
     <<: *java-service
     build:
-      context: ./delivery-tracking-service
+      context: .
+      dockerfile: delivery-tracking-service/Dockerfile
     container_name: pet-planet-delivery
     environment:
       <<: *java-env
@@ -268,7 +276,8 @@ services:
   fulfillment-service:
     <<: *java-service
     build:
-      context: ./fulfillment-service
+      context: .
+      dockerfile: fulfillment-service/Dockerfile
     container_name: pet-planet-fulfillment
     environment:
       <<: *java-env
@@ -285,7 +294,8 @@ services:
   gateway-service:
     <<: *java-service
     build:
-      context: ./gateway-service
+      context: .
+      dockerfile: gateway-service/Dockerfile
     container_name: pet-planet-gateway
     environment:
       <<: *java-env
@@ -342,6 +352,26 @@ services:
       - "${FRONTEND_PORT:-5173}:5173"
     depends_on:
       gateway-service:
+        condition: service_healthy
+    networks:
+      - pet-planet
+
+  # Optional (R-INF-07): browse topics, messages and dead-letter topics at http://localhost:8090.
+  # Not started by default to save memory: `make kafka-ui` (docker compose --profile tools up -d kafka-ui).
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.2.0
+    container_name: pet-planet-kafka-ui
+    profiles: ["tools"]
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      KAFKA_CLUSTERS_0_NAME: pet-planet
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "${KAFKA_UI_PORT:-8090}:8080"
+    depends_on:
+      kafka:
         condition: service_healthy
     networks:
       - pet-planet
