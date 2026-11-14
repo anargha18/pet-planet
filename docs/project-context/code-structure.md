@@ -7,6 +7,7 @@ All 10 services stay as top-level folders at the repository root. Inside each se
 | Path | Purpose |
 |---|---|
 | `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/` | Root Maven aggregator and wrapper: `./mvnw test` builds and tests all services without a global Maven install. Services still use `spring-boot-starter-parent` directly. |
+| `platform-commons/` | Shared **infrastructure-only** library (no domain or event classes): Kafka conventions (JSON converter, retries + `<topic>.DLT`, MDC correlation) and the transactional-outbox relay (`OutboxMessage`, `OutboxStore`, `OutboxRelay`), applied via Spring Boot auto-configuration. Services may depend on `com.petcommerce.platform`, never on each other. |
 | `<name>-service/` (×10) | One deployable Spring Boot service each, with its own `pom.xml`, `Dockerfile` and Flyway migrations. |
 | `frontend/` | React storefront. |
 | `infrastructure/postgres/init/` | Database and role creation for the local Postgres container. |
@@ -27,9 +28,9 @@ All 10 services stay as top-level folders at the repository root. Inside each se
 | `security` | Security filter chain, JWT validation, ownership/access policies (e.g. `OrderAccessPolicy`) | `domain.model` |
 | `messaging.event` | This service's own event payload records (incoming and outgoing) | — |
 | `messaging.consumer` | `@KafkaListener` adapters: deserialize → call `application` | `application`, `messaging.event` |
-| `messaging.publisher` | Builds events, writes them to the outbox and relays to Kafka (`*EventPublisher`) | `persistence`, `messaging.event`, `domain.model` |
+| `messaging.publisher` | Builds events and writes them to the outbox (`*EventPublisher`); exposes the outbox table to the shared relay (`*OutboxStore`) | `persistence`, `messaging.event`, `domain.model`, `com.petcommerce.platform` |
 | `persistence.repository` | Spring Data repositories and query specifications | `domain.model`, `persistence.entity` |
-| `persistence.entity` | Technical tables: outbox events, processed-event (idempotency) records | — |
+| `persistence.entity` | Technical tables: outbox events (implement `platform-commons` `OutboxMessage`), processed-event (idempotency) records | `com.petcommerce.platform` |
 | `client` | Outbound HTTP to other services (order → catalog) | `domain` |
 | `config` | Non-security Spring wiring (Kafka topics, beans) | — |
 | `routing` (gateway only) | Gateway route definitions | — |
@@ -45,7 +46,7 @@ All 10 services stay as top-level folders at the repository root. Inside each se
 5. Repositories are used only by `application`, `messaging.publisher` and `persistence`.
 6. `@RestController` classes live in `api.controller`, `@RestControllerAdvice` classes in `api.error`, `@KafkaListener` methods in `messaging.consumer`.
 7. Every `RuntimeException` subclass lives in `domain.exception`.
-8. No service imports another service's classes; services share JSON/HTTP contracts only.
+8. No service imports another service's classes; services share JSON/HTTP contracts only. The one shared dependency is `platform-commons` (`com.petcommerce.platform`).
 
 A violation fails `./mvnw test`.
 
