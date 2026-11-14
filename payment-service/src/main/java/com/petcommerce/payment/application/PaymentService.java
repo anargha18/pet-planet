@@ -3,14 +3,15 @@ package com.petcommerce.payment.application;
 import com.petcommerce.payment.domain.model.Payment;
 import com.petcommerce.payment.domain.model.PaymentStatus;
 import com.petcommerce.payment.messaging.event.PaymentFailedEvent;
+import com.petcommerce.payment.messaging.event.PaymentRefundedEvent;
 import com.petcommerce.payment.messaging.event.PaymentSucceededEvent;
 import com.petcommerce.payment.messaging.event.PetReservedEvent;
 import com.petcommerce.payment.messaging.publisher.PaymentEventPublisher;
+import com.petcommerce.payment.persistence.repository.ClosedOrderRepository;
 import com.petcommerce.payment.persistence.repository.PaymentRepository;
 import com.petcommerce.payment.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,27 +20,41 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Charges reserved orders and compensates closed ones (R-SAGA-04).
+ * <ul>
+ *   <li>PetReserved: charge the order total through the {@link PaymentGateway}, unless the order is already closed.</li>
+ *   <li>OrderCancelled / OrderFailed: mark the order closed; refund a SUCCEEDED payment.</li>
+ * </ul>
+ * Both paths take a per-order database lock first, so a charge and a cancellation never interleave: whichever runs
+ * second sees the other's result (closed order -> no charge; succeeded payment -> refund).
+ */
 @Service
 public class PaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
     public static final String PAYMENT_SUCCEEDED_TOPIC = "payment-succeeded-events";
     public static final String PAYMENT_FAILED_TOPIC = "payment-failed-events";
+    public static final String PAYMENT_REFUNDED_TOPIC = "payment-refunded-events";
+    private static final String CURRENCY = "USD";
 
     private final PaymentRepository paymentRepository;
     private final ProcessedEventRepository processedEventRepository;
+    private final ClosedOrderRepository closedOrderRepository;
     private final PaymentEventPublisher eventPublisher;
-    private final String simulationResult;
+    private final PaymentGateway paymentGateway;
 
     public PaymentService(
             PaymentRepository paymentRepository,
             ProcessedEventRepository processedEventRepository,
+            ClosedOrderRepository closedOrderRepository,
             PaymentEventPublisher eventPublisher,
-            Environment environment) {
+            PaymentGateway paymentGateway) {
         this.paymentRepository = paymentRepository;
         this.processedEventRepository = processedEventRepository;
+        this.closedOrderRepository = closedOrderRepository;
         this.eventPublisher = eventPublisher;
-        this.simulationResult = environment.getProperty("payment.simulation-result", "SUCCESS").trim().toUpperCase();
+        this.paymentGateway = paymentGateway;
     }
 
     @Transactional(readOnly = true)
@@ -49,68 +64,90 @@ public class PaymentService {
 
     @Transactional
     public Payment handlePetReservedEvent(PetReservedEvent event) {
-        if (event == null) {
+        if (event == null || event.orderId() == null) {
             return null;
         }
-
         if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping duplicate PetReservedEvent {}", event.eventId());
             return paymentRepository.findByOrderId(event.orderId()).orElse(null);
         }
+        if (event.totalAmount() == null || event.totalAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            // Required field: fail so the record is retried and then dead-lettered (R-EVT-07); never charge a guess.
+            throw new IllegalArgumentException("PetReservedEvent " + event.eventId() + " for order " + event.orderId()
+                    + " has no positive totalAmount");
+        }
 
+        paymentRepository.lockOrder(event.orderId());
+        if (closedOrderRepository.existsById(event.orderId())) {
+            log.info("Order {} is already cancelled/failed: not charging", event.orderId());
+            return null;
+        }
         Payment existing = paymentRepository.findByOrderId(event.orderId()).orElse(null);
         if (existing != null) {
             log.info("Payment already exists for order {} with payment {}", event.orderId(), existing.getPaymentId());
             return existing;
         }
 
-        BigDecimal amount = (event.totalAmount() != null && event.totalAmount().compareTo(BigDecimal.ZERO) > 0)
-                ? event.totalAmount()
-                : BigDecimal.valueOf(1000.00);
-        String currency = "USD";
-        String transactionReference = "txn-" + UUID.randomUUID();
-        Payment payment = new Payment(event.orderId(), amount, currency, PaymentStatus.PROCESSING, transactionReference);
+        Payment payment = new Payment(event.orderId(), event.totalAmount(), CURRENCY, PaymentStatus.PROCESSING, null);
         paymentRepository.save(payment);
 
-        boolean success = "SUCCESS".equalsIgnoreCase(simulationResult);
-        if (success) {
+        PaymentGateway.ChargeResult result = paymentGateway.charge(event.orderId(), event.totalAmount());
+        payment.setTransactionReference(result.transactionReference());
+        if (result.success()) {
             payment.setStatus(PaymentStatus.SUCCEEDED);
-            payment.setTransactionReference(transactionReference);
             payment = paymentRepository.save(payment);
-            PaymentSucceededEvent successEvent = new PaymentSucceededEvent(
-                    UUID.randomUUID(),
-                    "PaymentSucceededEvent",
-                    1,
-                    event.aggregateId(),
-                    Instant.now(),
-                    event.correlationId(),
-                    event.orderId(),
-                    payment.getPaymentId(),
-                    payment.getAmount()
-            );
             log.info("Payment succeeded for order {} with payment {} amount {}", event.orderId(), payment.getPaymentId(), payment.getAmount());
-            eventPublisher.publish(PAYMENT_SUCCEEDED_TOPIC, event.orderId().toString(), successEvent, payment.getPaymentId(), event.orderId());
+            eventPublisher.publish(PAYMENT_SUCCEEDED_TOPIC, event.orderId().toString(),
+                    new PaymentSucceededEvent(UUID.randomUUID(), "PaymentSucceededEvent", 1, event.aggregateId(), Instant.now(),
+                            event.correlationId(), event.orderId(), payment.getPaymentId(), payment.getAmount()),
+                    payment.getPaymentId(), event.orderId());
             return payment;
         }
 
         payment.setStatus(PaymentStatus.FAILED);
-        payment.setTransactionReference("failed-" + UUID.randomUUID());
         payment = paymentRepository.save(payment);
-        PaymentFailedEvent failedEvent = new PaymentFailedEvent(
-                UUID.randomUUID(),
-                "PaymentFailedEvent",
-                1,
-                event.aggregateId(),
-                Instant.now(),
-                event.correlationId(),
-                event.orderId(),
-                payment.getPaymentId(),
-                payment.getAmount(),
-                "PAYMENT_DECLINED"
-        );
-        log.warn("Payment failed for order {} with payment {}", event.orderId(), payment.getPaymentId());
-        eventPublisher.publish(PAYMENT_FAILED_TOPIC, event.orderId().toString(), failedEvent, payment.getPaymentId(), event.orderId());
+        log.warn("Payment failed for order {} with payment {}: {}", event.orderId(), payment.getPaymentId(), result.failureReason());
+        eventPublisher.publish(PAYMENT_FAILED_TOPIC, event.orderId().toString(),
+                new PaymentFailedEvent(UUID.randomUUID(), "PaymentFailedEvent", 1, event.aggregateId(), Instant.now(),
+                        event.correlationId(), event.orderId(), payment.getPaymentId(), payment.getAmount(), result.failureReason()),
+                payment.getPaymentId(), event.orderId());
         return payment;
     }
 
+    /**
+     * The order was cancelled or failed. Remember it (so no later charge happens) and refund a successful charge.
+     * Idempotent: a repeated event, or an already refunded payment, changes nothing.
+     */
+    @Transactional
+    public void handleOrderClosed(UUID eventId, Long orderId, UUID correlationId, String reason) {
+        if (orderId == null) {
+            return;
+        }
+        if (eventId != null && processedEventRepository.markProcessed(eventId) == 0) {
+            log.info("Skipping duplicate order-closed event {}", eventId);
+            return;
+        }
+        paymentRepository.lockOrder(orderId);
+        closedOrderRepository.markClosed(orderId, truncate(reason));
+
+        Payment payment = paymentRepository.findByOrderId(orderId).orElse(null);
+        if (payment == null || payment.getStatus() != PaymentStatus.SUCCEEDED) {
+            log.info("Order {} closed ({}); nothing to refund (payment {})", orderId, reason,
+                    payment == null ? "none" : payment.getStatus());
+            return;
+        }
+        String refundReference = paymentGateway.refund(orderId, payment.getAmount(), payment.getTransactionReference());
+        payment.refund(truncate(reason), refundReference);
+        paymentRepository.save(payment);
+        log.info("Refunded payment {} of {} for closed order {} ({})", payment.getPaymentId(), payment.getAmount(), orderId, reason);
+        eventPublisher.publish(PAYMENT_REFUNDED_TOPIC, orderId.toString(),
+                new PaymentRefundedEvent(UUID.randomUUID(), "PaymentRefundedEvent", 1, UUID.randomUUID(), Instant.now(),
+                        correlationId, orderId, payment.getPaymentId(), payment.getAmount(), reason),
+                payment.getPaymentId(), orderId);
+    }
+
+    private static String truncate(String reason) {
+        String value = reason == null ? "UNKNOWN" : reason;
+        return value.length() <= 64 ? value : value.substring(0, 64);
+    }
 }

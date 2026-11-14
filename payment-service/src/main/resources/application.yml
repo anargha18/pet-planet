@@ -33,6 +33,8 @@ spring:
 
 payment:
   simulation-result: ${PAYMENT_SIMULATION_RESULT:SUCCESS}
+  # How long a simulated charge takes (ISO-8601); used by the smoke test to create cancel/expiry races.
+  simulation-delay: ${PAYMENT_SIMULATION_DELAY:PT0S}
 
 management:
   endpoints:

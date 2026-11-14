@@ -4,5 +4,7 @@ public enum PaymentStatus {
     PENDING,
     PROCESSING,
     SUCCEEDED,
-    FAILED
+    FAILED,
+    /** A successful charge was returned because the order was cancelled or failed. */
+    REFUNDED
 }

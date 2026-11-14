@@ -21,4 +21,9 @@ public class KafkaConfig {
     NewTopic paymentFailedEventsTopic() {
         return TopicBuilder.name("payment-failed-events").partitions(1).replicas(1).build();
     }
+
+    @Bean
+    NewTopic paymentRefundedEventsTopic() {
+        return TopicBuilder.name("payment-refunded-events").partitions(1).replicas(1).build();
+    }
 }
