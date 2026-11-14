@@ -33,24 +33,28 @@ Outbox tables (one per producing service): `catalog_outbox`, `order_outbox`, `in
 
 ## Topics
 
-Each producer declares the topics it owns in its `config/KafkaConfig` (R-EVT-06). Consumers only subscribe.
+Each producer declares the topics it owns in its `config/KafkaConfig` (R-EVT-06). Consumers only subscribe. Phase 2 added `order-failed-events`, `pets-sold-events`, `inventory-sale-conflict-events` and `payment-refunded-events`. `OrderCancelledEvent` gained a `reason` (`CUSTOMER_CANCELLED` / `RESERVATION_EXPIRED`). The sale is completed by inventory on `payment-succeeded-events`, and the order is confirmed on `pets-sold-events` (see [Architecture](./architecture.md#1-happy-path-checkout-saga)).
 
 | Topic | Payload record | Producer | Consumers |
 |---|---|---|---|
 | `delivery-status-updated-events` | `DeliveryStatusUpdatedEvent` | delivery-tracking | fulfillment |
 | `fulfillment-updated-events` | `FulfillmentUpdatedEvent` | fulfillment | — (no consumer yet; retirement planned, see restructuring plan §2.3) |
+| `inventory-sale-conflict-events` | `InventorySaleConflictEvent` | inventory | order |
 | `inventory-status-events` | `InventoryStatusChangedEvent` | inventory | pet-catalog |
 | `notification-sent-events` | `NotificationSentEvent` | notification | — (no consumer yet) |
-| `order-cancelled-events` | `OrderCancelledEvent` | order | inventory |
-| `order-confirmed-events` | `OrderConfirmedEvent` | order | inventory, notification, shipping |
+| `order-cancelled-events` | `OrderCancelledEvent` | order | inventory, payment |
+| `order-confirmed-events` | `OrderConfirmedEvent` | order | notification, shipping |
 | `order-created-events` | `OrderCreatedEvent` | order | inventory |
-| `payment-failed-events` | `PaymentFailedEvent` | payment | inventory, order |
-| `payment-succeeded-events` | `PaymentSucceededEvent` | payment | order |
-| `pet-catalog-events` | `PetCatalogEvent` (`eventType` `PetCreatedEvent`) | pet-catalog | inventory |
+| `order-failed-events` | `OrderFailedEvent` | order | inventory, payment |
+| `payment-failed-events` | `PaymentFailedEvent` | payment | order |
+| `payment-refunded-events` | `PaymentRefundedEvent` | payment | — (no consumer yet; fulfillment/notification planned in Phase 4) |
+| `payment-succeeded-events` | `PaymentSucceededEvent` | payment | inventory |
+| `pet-catalog-events` | `PetCatalogEvent` (`eventType` `PetCreatedEvent` / `PetArchivedEvent`) | pet-catalog | inventory |
 | `pet-reservation-expired-events` | `PetReservationExpiredEvent` | inventory | order |
 | `pet-reservation-failed-events` | `PetReservationFailedEvent` | inventory | order |
 | `pet-reservation-released-events` | `PetReservationReleasedEvent` | inventory | — (no consumer yet; retirement planned) |
 | `pet-reserved-events` | `PetReservedEvent` | inventory | order, payment |
+| `pets-sold-events` | `PetsSoldEvent` | inventory | order |
 | `shipment-created-events` | `ShipmentCreatedEvent` | shipping | delivery-tracking |
 
 ## Payloads
@@ -61,16 +65,20 @@ Most events share these envelope fields: `eventId`, `eventType`, `eventVersion`,
 |---|---|
 | `DeliveryStatusUpdatedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `UUID deliveryId`, `String trackingNumber`, `String status` |
 | `FulfillmentUpdatedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID fulfillmentId`, `String trackingNumber`, `String status`, `String notes` |
+| `InventorySaleConflictEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `String reason` |
 | `InventoryStatusChangedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID petId`, `String status`, `Long orderId`, `Instant timestamp` |
 | `NotificationSentEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID notificationId`, `String message` |
-| `OrderCancelledEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `List<UUID> petIds` |
+| `OrderCancelledEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `List<UUID> petIds`, `String reason` |
 | `OrderConfirmedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `List<UUID> petIds`, `BigDecimal totalAmount` |
 | `OrderCreatedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `List<UUID> petIds`, `BigDecimal totalAmount` |
+| `OrderFailedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `List<UUID> petIds`, `String reason` |
 | `PaymentFailedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID paymentId`, `BigDecimal amount`, `String reason` |
+| `PaymentRefundedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID paymentId`, `BigDecimal amount`, `String reason` |
 | `PaymentSucceededEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID paymentId`, `BigDecimal amount` |
 | `PetCatalogEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID petId`, `String availabilityStatus`, `Instant timestamp` |
 | `PetReservationExpiredEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID petId` |
 | `PetReservationFailedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID petId`, `String reason` |
 | `PetReservationReleasedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID reservationId`, `UUID petId` |
 | `PetReservedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `UUID reservationId`, `UUID petId`, `BigDecimal totalAmount` |
+| `PetsSoldEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `List<UUID> petIds` |
 | `ShipmentCreatedEvent` | `UUID eventId`, `String eventType`, `Integer eventVersion`, `UUID aggregateId`, `Instant timestamp`, `UUID correlationId`, `Long orderId`, `Long customerId`, `UUID shipmentId`, `String trackingNumber`, `String status` |

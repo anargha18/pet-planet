@@ -427,6 +427,40 @@ Deviation: instead of `ErrorHandlingDeserializer` + per-listener default types, 
 
 Note: a single service is now built with `./mvnw -pl <service> -am …` (it needs `platform-commons` from the reactor).
 
+**Phase 2: done (2026-11-14).**
+- order: `OrderStateMachine` (R-SAGA-01); `PAID` removed (`V4`, `PAID → CONFIRMED`); expiry → `CANCELLED` + `OrderCancelled(RESERVATION_EXPIRED)`; reservation failure, payment failure and sale conflict → `FAILED` + new `OrderFailed(reason)` (R-SAGA-02).
+- inventory: unknown pet → `PET_NOT_FOUND`; the sale happens on `payment-succeeded-events` only while the pets are still reserved for the order, otherwise `InventorySaleConflict`; releases on `OrderCancelled`/`OrderFailed` only (R-SAGA-03); `RETIRED` status; read-only HTTP (R-SAGA-07); `INVENTORY_RESERVATION_TIMEOUT` as a `Duration` (R-SAGA-08).
+- payment:
+  - refunds a `SUCCEEDED` charge when the order closes (`REFUNDED`, `PaymentRefundedEvent`); the `closed_orders` marker blocks later charges (`V3`, R-SAGA-04);
+  - charge and closure are serialized with a per-order PostgreSQL advisory lock;
+  - `PaymentGateway` port with `SimulatedPaymentGateway` (result + delay), the extraction deferred from Phase 0a;
+  - the `1000.00` fallback amount was removed.
+- catalog: availability is read-only via the API; `DELETE` archives (`RETIRED`, `PetArchived`, 409 for reserved/sold); retired pets hidden by default (R-SAGA-05).
+- order-service maps malformed JSON to 400 instead of 500; found by the smoke test (audit A4, partial).
+- `scripts/smoke-test.sh` / `make smoke` (R-TEST-04, part) and contract tests for the 4 new consumed topics. 205 tests pass.
+
+Verified on the running stack (database kept; only new migrations): `make smoke` passes **22/22** checks:
+- happy path;
+- archive rules (archive → `RETIRED`, hidden, ordering → 409, archiving a sold pet → 409, malformed JSON → 400);
+- payment declined → `FAILED`, pet released;
+- cancel during an 8 s charge → `CANCELLED`, payment `REFUNDED`, pet released;
+- reservation expiring (5 s) during a 15 s charge → `CANCELLED`, `REFUNDED`, pet released.
+
+The event history of the two race orders confirms the late charge was refunded the moment it completed and inventory reported a sale conflict instead of selling the released pet. All outboxes are published with no errors.
+
+Deviation (better than §2.3/§2.4 as originally written): the plan confirmed the order on `PaymentSucceeded` and had inventory mark SOLD afterwards, compensating a conflict by failing an already-confirmed order. Instead, **inventory completes the sale on `PaymentSucceeded` and order confirms on `PetsSold`**. CONFIRMED stays terminal, and shipping/notification only ever see orders whose pets are really sold. The topic table is updated accordingly in [events.md](../project-context/events.md): order no longer consumes `payment-succeeded-events`; inventory no longer consumes `order-confirmed-events`/`payment-failed-events`.
+
+Fixed during verification: the first smoke run exposed two bugs in my own changes.
+1. The new inventory test settings had been added to the **postgres** block of `docker-compose.yml` (same anchor line), so the expiry scenario ran with the default 5-minute timeout.
+2. A quoting bug in the script masked a 500 as a pass.
+
+Both were fixed and the full smoke test re-run.
+
+Not done or not verified in Phase 2:
+- Notification and fulfillment don't consume `payment-refunded-events` / `order-failed-events` yet (Phase 4).
+- No admin delivery step in the smoke test (Phase 4).
+- `KafkaPlatformIntegrationTest` can flake when the full stack is also running on a 4 GB VM (passes on rerun).
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.

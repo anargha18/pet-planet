@@ -34,11 +34,11 @@ The gateway authorizes these operations and passes a trusted authenticated user 
 
 | Method/path | Request and behavior | Response/status/access |
 |---|---|---|
-| `GET /api/v1/pets` | Optional `species`, `breed`, `minPrice`, `maxPrice`, `availabilityStatus`, pageable (`page`, `size`, `sort`). | `Page<PetResponse>`, `200 OK`. Public. |
+| `GET /api/v1/pets` | Optional `species`, `breed`, `minPrice`, `maxPrice`, `availabilityStatus`, pageable (`page`, `size`, `sort`). Archived (`RETIRED`) pets are excluded unless `availabilityStatus=RETIRED` is requested. | `Page<PetResponse>`, `200 OK`. Public. |
 | `GET /api/v1/pets/{petId}` | `petId` is UUID. | `PetResponse`, `200 OK`; `404` if missing. Public. |
 | `POST /api/v1/pets` | JSON: `name`, `species`, `breed`, `age`, `gender`, `price`, `description`. Emits `PetCreatedEvent`. | `PetResponse`, `201 Created`. `ADMIN`. |
-| `PUT /api/v1/pets/{petId}` | Full pet fields including `availabilityStatus`. | `PetResponse`, `200 OK`. `ADMIN`. |
-| `DELETE /api/v1/pets/{petId}` | Hard delete by UUID. | `204 No Content`. `ADMIN`. |
+| `PUT /api/v1/pets/{petId}` | `name`, `species`, `breed`, `age`, `gender`, `price`, `description`. `availabilityStatus` is **not** accepted: inventory owns availability. | `PetResponse`, `200 OK`. `ADMIN`. |
+| `DELETE /api/v1/pets/{petId}` | **Archives** (soft delete): status becomes `RETIRED`, the pet is hidden from the default listing, can no longer be ordered, and inventory retires it. Repeating is a no-op. | `204 No Content`; `409 Conflict` if the pet is `RESERVED` or `SOLD`. `ADMIN`. |
 
 ## Orders (`order-service`, port 8081)
 
@@ -53,20 +53,17 @@ The gateway authorizes these operations and passes a trusted authenticated user 
 
 ## Inventory (`inventory-service`, port 8082)
 
-All `/api/v1/inventory/**` endpoints require `ADMIN`.
+All `/api/v1/inventory/**` endpoints require `ADMIN`. Inventory is **read-only** over HTTP (R-SAGA-07): reservations, releases and sales happen only through the checkout saga.
 
 | Method/path | Purpose | Response/status |
 |---|---|---|
 | `GET /api/v1/inventory/pets/{petId}` | Returns inventory status for UUID `petId`. | `InventoryResponse`, `200 OK`. |
-| `POST /api/v1/inventory/pets/{petId}/reserve` | Manually reserves a pet. | `InventoryResponse`, `200 OK`. |
-| `POST /api/v1/inventory/pets/{petId}/release` | Releases reservation and syncs catalog. | `InventoryResponse`, `200 OK`. |
-| `POST /api/v1/inventory/pets/{petId}/sold` | Marks pet sold. | `InventoryResponse`, `200 OK`. |
 
 ## Payments, notifications, shipping, delivery, and fulfillment
 
 These APIs require a valid gateway bearer token. Existing service-level ownership checks apply where implemented.
 
-- `GET /api/v1/payments/order/{orderId}` — payment record by numeric order ID.
+- `GET /api/v1/payments/order/{orderId}`: payment record by numeric order ID. `status` is `PROCESSING`, `SUCCEEDED`, `FAILED` or `REFUNDED`, plus `refundedAt` and `refundReason` when refunded.
 - `GET /api/v1/notifications/order/{orderId}`, `GET /api/v1/notifications/customer/{customerId}`.
 - `GET /api/v1/shipments/order/{orderId}`, `GET /api/v1/shipments/customer/{customerId}`, `PUT /api/v1/shipments/order/{orderId}/delivered`.
 - `GET /api/v1/deliveries/order/{orderId}`, `GET /api/v1/deliveries/customer/{customerId}`, `PUT /api/v1/deliveries/order/{orderId}/delivered`.
