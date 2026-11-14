@@ -136,8 +136,9 @@ class ArchitectureTest {
                 .should().dependOnClassesThat(
                         DescribedPredicate.describe("another service's classes",
                                 (JavaClass c) -> c.getPackageName().startsWith("com.petcommerce.")
-                                        && !c.getPackageName().startsWith(BASE)))
-                .because("services share contracts (JSON events, HTTP), never code")
+                                        && !c.getPackageName().startsWith(BASE)
+                                        && !c.getPackageName().startsWith("com.petcommerce.platform")))
+                .because("services share contracts (JSON events, HTTP), never code; only platform-commons infrastructure is shared")
                 .check(CLASSES);
     }
 }

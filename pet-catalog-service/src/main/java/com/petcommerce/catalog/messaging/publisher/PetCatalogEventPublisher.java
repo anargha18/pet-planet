@@ -1,38 +1,53 @@
 package com.petcommerce.catalog.messaging.publisher;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.petcommerce.catalog.domain.model.Pet;
 import com.petcommerce.catalog.messaging.event.PetCatalogEvent;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.petcommerce.catalog.persistence.entity.CatalogOutboxEvent;
+import com.petcommerce.catalog.persistence.repository.CatalogOutboxRepository;
+import com.petcommerce.platform.outbox.OutboxPayloads;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Publishes catalog events to Kafka.
- * Note: sends directly (no outbox yet) — moving this to a transactional outbox is planned (R-SAGA-05).
+ * Writes catalog events to the transactional outbox inside the caller's transaction; the platform outbox relay
+ * publishes them to Kafka after commit (R-EVT-03). Previously the event was sent directly inside the transaction.
  */
 @Component
 public class PetCatalogEventPublisher {
 
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    private final CatalogOutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
-    @Autowired(required = false)
-    public void setKafkaTemplate(KafkaTemplate<String, Object> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
+    public PetCatalogEventPublisher(CatalogOutboxRepository outboxRepository, ObjectMapper objectMapper) {
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
     }
 
     public void publishPetCreated(Pet savedPet) {
-        if (kafkaTemplate != null && savedPet.getId() != null) {
-            kafkaTemplate.send("pet-catalog-events", savedPet.getId().toString(), new PetCatalogEvent(
-                    UUID.randomUUID(),
-                    "PetCreatedEvent",
-                    1,
-                    savedPet.getId(),
-                    savedPet.getAvailabilityStatus().name(),
-                    Instant.now()
-            ));
+        if (savedPet.getId() == null) {
+            return;
         }
+        UUID eventId = UUID.randomUUID();
+        PetCatalogEvent event = new PetCatalogEvent(
+                eventId,
+                "PetCreatedEvent",
+                1,
+                savedPet.getId(),
+                savedPet.getAvailabilityStatus().name(),
+                Instant.now()
+        );
+        outboxRepository.save(new CatalogOutboxEvent(
+                eventId,
+                "pet-catalog-events",
+                "PetCreatedEvent",
+                savedPet.getId(),
+                null,
+                savedPet.getId().toString(),
+                OutboxPayloads.toJson(objectMapper, event),
+                Instant.now()
+        ));
     }
 }

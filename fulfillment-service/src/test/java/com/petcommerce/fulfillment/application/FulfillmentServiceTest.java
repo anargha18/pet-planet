@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -36,8 +35,6 @@ class FulfillmentServiceTest {
     @Mock
     private FulfillmentOutboxRepository fulfillmentOutboxRepository;
 
-    @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -46,13 +43,15 @@ class FulfillmentServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Default: every event is seen for the first time; duplicate-handling tests override this.
+        lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
         lenient().when(fulfillmentRecordRepository.save(any(FulfillmentRecord.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(fulfillmentOutboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         fulfillmentService = new FulfillmentService(
                 fulfillmentRecordRepository,
                 processedEventRepository,
-                new FulfillmentEventPublisher(fulfillmentOutboxRepository, kafkaTemplate, objectMapper)
+                new FulfillmentEventPublisher(fulfillmentOutboxRepository, objectMapper)
         );
     }
 
@@ -60,7 +59,7 @@ class FulfillmentServiceTest {
     void handleDeliveryStatusUpdatedEventCreatesFulfillmentRecord() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 888L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(fulfillmentRecordRepository.findByOrderId(orderId)).thenReturn(Optional.empty());
 
         DeliveryStatusUpdatedEvent event = new DeliveryStatusUpdatedEvent(
@@ -71,6 +70,7 @@ class FulfillmentServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 UUID.randomUUID(),
                 "PET-888-TRACKING",
                 "IN_TRANSIT"
@@ -90,7 +90,7 @@ class FulfillmentServiceTest {
         UUID eventId = UUID.randomUUID();
         Long orderId = 889L;
         FulfillmentRecord existing = new FulfillmentRecord(orderId, 101L, "PET-889-TRACKING", FulfillmentStatus.SHIPPED, "Initial");
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(fulfillmentRecordRepository.findByOrderId(orderId)).thenReturn(Optional.of(existing));
 
         DeliveryStatusUpdatedEvent event = new DeliveryStatusUpdatedEvent(
@@ -101,6 +101,7 @@ class FulfillmentServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 UUID.randomUUID(),
                 "PET-889-TRACKING",
                 "DELIVERED"
@@ -117,7 +118,7 @@ class FulfillmentServiceTest {
     void duplicateDeliveryStatusUpdatedEventIsIgnoredSafely() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 999L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(true);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(0);
 
         DeliveryStatusUpdatedEvent event = new DeliveryStatusUpdatedEvent(
                 eventId,
@@ -127,6 +128,7 @@ class FulfillmentServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 UUID.randomUUID(),
                 "PET-999-TRACKING",
                 "DELIVERED"

@@ -16,7 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.Environment;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,8 +33,6 @@ class InventoryServiceTest {
     @Mock
     private PetInventoryRepository petInventoryRepository;
 
-    @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
     private Environment environment;
@@ -50,11 +47,13 @@ class InventoryServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Default: every event is seen for the first time; duplicate-handling tests override this.
+        lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
         when(environment.getProperty("inventory.reservation-expiration-minutes", "5")).thenReturn("5");
         inventoryService = new InventoryService(
                 petInventoryRepository,
                 processedEventRepository,
-                new InventoryEventPublisher(inventoryOutboxRepository, kafkaTemplate, new ObjectMapper().findAndRegisterModules()),
+                new InventoryEventPublisher(inventoryOutboxRepository, new ObjectMapper().findAndRegisterModules()),
                 environment
         );
     }
@@ -100,7 +99,9 @@ class InventoryServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 42L,
-                List.of(petId)
+                101L,
+                List.of(petId),
+                null
         );
 
         assertDoesNotThrow(() -> inventoryService.handleOrderCreatedEvent(event));
@@ -114,7 +115,7 @@ class InventoryServiceTest {
         UUID eventId = UUID.randomUUID();
         PetInventory inventory = new PetInventory(petId);
         when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
-        when(processedEventRepository.existsById(eventId)).thenReturn(false, true);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1, 0);
         when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrderCreatedEvent event = new OrderCreatedEvent(
@@ -125,7 +126,9 @@ class InventoryServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 99L,
-                List.of(petId)
+                101L,
+                List.of(petId),
+                null
         );
 
         inventoryService.handleOrderCreatedEvent(event);
@@ -154,7 +157,7 @@ class InventoryServiceTest {
         UUID petId = UUID.randomUUID();
         PetInventory inventory = new PetInventory(petId);
         inventory.setStatus(InventoryStatus.RESERVED);
-        when(processedEventRepository.existsById(any(UUID.class))).thenReturn(false);
+        when(processedEventRepository.markProcessed(any(UUID.class))).thenReturn(1);
         when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
         when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -166,6 +169,7 @@ class InventoryServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 77L,
+                101L,
                 List.of(petId),
                 BigDecimal.valueOf(50000)
         );

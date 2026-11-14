@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,8 +37,6 @@ class ShippingServiceTest {
     @Mock
     private ShipmentOutboxRepository shipmentOutboxRepository;
 
-    @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -48,13 +45,15 @@ class ShippingServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Default: every event is seen for the first time; duplicate-handling tests override this.
+        lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
         lenient().when(shipmentRepository.save(any(Shipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(shipmentOutboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         shippingService = new ShippingService(
                 shipmentRepository,
                 processedEventRepository,
-                new ShipmentEventPublisher(shipmentOutboxRepository, kafkaTemplate, objectMapper)
+                new ShipmentEventPublisher(shipmentOutboxRepository, objectMapper)
         );
     }
 
@@ -62,7 +61,7 @@ class ShippingServiceTest {
     void handleOrderConfirmedEventCreatesShipment() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 321L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(shipmentRepository.findByOrderId(orderId)).thenReturn(Optional.empty());
 
         OrderConfirmedEvent event = new OrderConfirmedEvent(
@@ -73,6 +72,7 @@ class ShippingServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 List.of(UUID.randomUUID()),
                 BigDecimal.valueOf(250.00)
         );
@@ -90,7 +90,7 @@ class ShippingServiceTest {
     void duplicateOrderConfirmedEventIsIgnoredSafely() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 421L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(true);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(0);
 
         OrderConfirmedEvent event = new OrderConfirmedEvent(
                 eventId,
@@ -100,6 +100,7 @@ class ShippingServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 List.of(UUID.randomUUID()),
                 BigDecimal.valueOf(180.00)
         );

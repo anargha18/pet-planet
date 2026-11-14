@@ -6,13 +6,11 @@ import com.petcommerce.payment.messaging.event.PaymentFailedEvent;
 import com.petcommerce.payment.messaging.event.PaymentSucceededEvent;
 import com.petcommerce.payment.messaging.event.PetReservedEvent;
 import com.petcommerce.payment.messaging.publisher.PaymentEventPublisher;
-import com.petcommerce.payment.persistence.entity.ProcessedEvent;
 import com.petcommerce.payment.persistence.repository.PaymentRepository;
 import com.petcommerce.payment.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,15 +53,8 @@ public class PaymentService {
             return null;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping duplicate PetReservedEvent {}", event.eventId());
-            return paymentRepository.findByOrderId(event.orderId()).orElse(null);
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("PetReservedEvent {} already processed; ignoring safely", event.eventId());
             return paymentRepository.findByOrderId(event.orderId()).orElse(null);
         }
 

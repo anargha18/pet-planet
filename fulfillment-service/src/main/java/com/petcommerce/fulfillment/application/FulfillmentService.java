@@ -5,12 +5,10 @@ import com.petcommerce.fulfillment.domain.model.FulfillmentStatus;
 import com.petcommerce.fulfillment.messaging.event.DeliveryStatusUpdatedEvent;
 import com.petcommerce.fulfillment.messaging.event.FulfillmentUpdatedEvent;
 import com.petcommerce.fulfillment.messaging.publisher.FulfillmentEventPublisher;
-import com.petcommerce.fulfillment.persistence.entity.ProcessedEvent;
 import com.petcommerce.fulfillment.persistence.repository.FulfillmentRecordRepository;
 import com.petcommerce.fulfillment.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,15 +50,8 @@ public class FulfillmentService {
             return null;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping already processed DeliveryStatusUpdatedEvent {}", event.eventId());
-            return fulfillmentRecordRepository.findByOrderId(event.orderId()).orElse(null);
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("Duplicate DeliveryStatusUpdatedEvent {} detected and ignored", event.eventId());
             return fulfillmentRecordRepository.findByOrderId(event.orderId()).orElse(null);
         }
 
@@ -78,7 +69,11 @@ public class FulfillmentService {
             record = fulfillmentRecordRepository.save(existing);
             log.info("Updated existing fulfillment record for order {} to status {}", event.orderId(), record.getStatus());
         } else {
-            Long customerId = event.customerId() != null ? event.customerId() : 101L;
+            if (event.customerId() == null) {
+                // Required field: fail so the record is retried and then dead-lettered (R-EVT-07), never guessed.
+                throw new IllegalArgumentException("Event " + event.eventId() + " for order " + event.orderId() + " has no customerId");
+            }
+            Long customerId = event.customerId();
             record = new FulfillmentRecord(
                     event.orderId(),
                     customerId,

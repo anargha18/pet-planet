@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -36,8 +35,6 @@ class DeliveryTrackingServiceTest {
     @Mock
     private DeliveryOutboxRepository deliveryOutboxRepository;
 
-    @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -46,13 +43,15 @@ class DeliveryTrackingServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Default: every event is seen for the first time; duplicate-handling tests override this.
+        lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
         lenient().when(deliveryRecordRepository.save(any(DeliveryRecord.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(deliveryOutboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         deliveryTrackingService = new DeliveryTrackingService(
                 deliveryRecordRepository,
                 processedEventRepository,
-                new DeliveryEventPublisher(deliveryOutboxRepository, kafkaTemplate, objectMapper)
+                new DeliveryEventPublisher(deliveryOutboxRepository, objectMapper)
         );
     }
 
@@ -60,7 +59,7 @@ class DeliveryTrackingServiceTest {
     void handleShipmentCreatedEventCreatesDeliveryTracking() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 555L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(deliveryRecordRepository.findByOrderId(orderId)).thenReturn(Optional.empty());
 
         ShipmentCreatedEvent event = new ShipmentCreatedEvent(
@@ -71,6 +70,7 @@ class DeliveryTrackingServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 UUID.randomUUID(),
                 "PET-555-ABC123",
                 "SHIPPED"
@@ -89,7 +89,7 @@ class DeliveryTrackingServiceTest {
     void duplicateShipmentCreatedEventIsIgnoredSafely() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 777L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(true);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(0);
 
         ShipmentCreatedEvent event = new ShipmentCreatedEvent(
                 eventId,
@@ -99,6 +99,7 @@ class DeliveryTrackingServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 UUID.randomUUID(),
                 "PET-777-XYZ999",
                 "SHIPPED"

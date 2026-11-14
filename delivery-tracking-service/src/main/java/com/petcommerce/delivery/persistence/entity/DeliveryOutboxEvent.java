@@ -1,5 +1,6 @@
 package com.petcommerce.delivery.persistence.entity;
 
+import com.petcommerce.platform.outbox.OutboxMessage;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -10,9 +11,15 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Transactional outbox row: written in the same database transaction as the business change and
+ * published to Kafka afterwards by the platform outbox relay (platform-commons).
+ */
 @Entity
 @Table(name = "delivery_outbox")
-public class DeliveryOutboxEvent {
+public class DeliveryOutboxEvent implements OutboxMessage {
+
+    private static final int MAX_ERROR_LENGTH = 2000;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -33,6 +40,9 @@ public class DeliveryOutboxEvent {
     @Column(name = "correlation_id")
     private UUID correlationId;
 
+    @Column(name = "message_key")
+    private String messageKey;
+
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
     private String payload;
 
@@ -42,15 +52,22 @@ public class DeliveryOutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "attempts", nullable = false)
+    private int attempts;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    private String lastError;
+
     protected DeliveryOutboxEvent() {
     }
 
-    public DeliveryOutboxEvent(UUID eventId, String topic, String eventType, Long orderId, UUID correlationId, String payload, Instant createdAt) {
+    public DeliveryOutboxEvent(UUID eventId, String topic, String eventType, Long orderId, UUID correlationId, String messageKey, String payload, Instant createdAt) {
         this.eventId = eventId;
         this.topic = topic;
         this.eventType = eventType;
         this.orderId = orderId;
         this.correlationId = correlationId;
+        this.messageKey = messageKey;
         this.payload = payload;
         this.createdAt = createdAt;
     }
@@ -59,14 +76,17 @@ public class DeliveryOutboxEvent {
         return id;
     }
 
+    @Override
     public UUID getEventId() {
         return eventId;
     }
 
+    @Override
     public String getTopic() {
         return topic;
     }
 
+    @Override
     public String getEventType() {
         return eventType;
     }
@@ -75,10 +95,21 @@ public class DeliveryOutboxEvent {
         return orderId;
     }
 
+    @Override
     public UUID getCorrelationId() {
         return correlationId;
     }
 
+    /** The key chosen by the publisher; rows written before message_key existed fall back to orderId/eventId. */
+    @Override
+    public String getMessageKey() {
+        if (messageKey != null) {
+            return messageKey;
+        }
+        return orderId != null ? orderId.toString() : eventId.toString();
+    }
+
+    @Override
     public String getPayload() {
         return payload;
     }
@@ -91,7 +122,23 @@ public class DeliveryOutboxEvent {
         return publishedAt;
     }
 
-    public void setPublishedAt(Instant publishedAt) {
+    public int getAttempts() {
+        return attempts;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    @Override
+    public void markPublished(Instant publishedAt) {
         this.publishedAt = publishedAt;
+        this.lastError = null;
+    }
+
+    @Override
+    public void recordFailure(String error) {
+        this.attempts++;
+        this.lastError = error == null || error.length() <= MAX_ERROR_LENGTH ? error : error.substring(0, MAX_ERROR_LENGTH);
     }
 }

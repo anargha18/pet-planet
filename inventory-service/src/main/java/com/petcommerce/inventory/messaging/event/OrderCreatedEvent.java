@@ -17,16 +17,4 @@ public record OrderCreatedEvent(
         List<UUID> petIds,
         BigDecimal totalAmount
 ) {
-    public OrderCreatedEvent(
-            UUID eventId,
-            String eventType,
-            Integer eventVersion,
-            UUID aggregateId,
-            Instant timestamp,
-            UUID correlationId,
-            Long orderId,
-            List<UUID> petIds
-    ) {
-        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, 101L, petIds, null);
-    }
 }
