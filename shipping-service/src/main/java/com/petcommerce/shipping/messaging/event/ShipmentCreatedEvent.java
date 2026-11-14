@@ -16,18 +16,4 @@ public record ShipmentCreatedEvent(
         String trackingNumber,
         String status
 ) {
-    public ShipmentCreatedEvent(
-            UUID eventId,
-            String eventType,
-            Integer eventVersion,
-            UUID aggregateId,
-            Instant timestamp,
-            UUID correlationId,
-            Long orderId,
-            UUID shipmentId,
-            String trackingNumber,
-            String status
-    ) {
-        this(eventId, eventType, eventVersion, aggregateId, timestamp, correlationId, orderId, 101L, shipmentId, trackingNumber, status);
-    }
 }

@@ -5,12 +5,10 @@ import com.petcommerce.notification.domain.model.NotificationStatus;
 import com.petcommerce.notification.messaging.event.NotificationSentEvent;
 import com.petcommerce.notification.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.notification.messaging.publisher.NotificationEventPublisher;
-import com.petcommerce.notification.persistence.entity.ProcessedEvent;
 import com.petcommerce.notification.persistence.repository.NotificationRepository;
 import com.petcommerce.notification.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,15 +49,8 @@ public class NotificationService {
             return null;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping already processed OrderConfirmedEvent {}", event.eventId());
-            return notificationRepository.findByOrderId(event.orderId()).orElse(null);
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("Duplicate OrderConfirmedEvent {} detected and ignored", event.eventId());
             return notificationRepository.findByOrderId(event.orderId()).orElse(null);
         }
 
@@ -69,7 +60,11 @@ public class NotificationService {
             return existing;
         }
 
-        Long customerId = event.customerId() != null ? event.customerId() : 101L;
+        if (event.customerId() == null) {
+            // Required field: fail so the record is retried and then dead-lettered (R-EVT-07), never guessed.
+            throw new IllegalArgumentException("Event " + event.eventId() + " for order " + event.orderId() + " has no customerId");
+        }
+        Long customerId = event.customerId();
         String message = "Your pet order " + event.orderId() + " has been confirmed and is on the way!";
         Notification notification = new Notification(event.orderId(), customerId, message, NotificationStatus.PENDING);
         notificationRepository.save(notification);

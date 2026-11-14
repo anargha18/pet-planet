@@ -5,12 +5,10 @@ import com.petcommerce.shipping.domain.model.ShipmentStatus;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.shipping.messaging.event.ShipmentCreatedEvent;
 import com.petcommerce.shipping.messaging.publisher.ShipmentEventPublisher;
-import com.petcommerce.shipping.persistence.entity.ProcessedEvent;
 import com.petcommerce.shipping.persistence.repository.ProcessedEventRepository;
 import com.petcommerce.shipping.persistence.repository.ShipmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,15 +59,8 @@ public class ShippingService {
             return null;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping already processed OrderConfirmedEvent {}", event.eventId());
-            return shipmentRepository.findByOrderId(event.orderId()).orElse(null);
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("Duplicate OrderConfirmedEvent {} detected and ignored", event.eventId());
             return shipmentRepository.findByOrderId(event.orderId()).orElse(null);
         }
 
@@ -79,7 +70,11 @@ public class ShippingService {
             return existing;
         }
 
-        Long customerId = event.customerId() != null ? event.customerId() : 101L;
+        if (event.customerId() == null) {
+            // Required field: fail so the record is retried and then dead-lettered (R-EVT-07), never guessed.
+            throw new IllegalArgumentException("Event " + event.eventId() + " for order " + event.orderId() + " has no customerId");
+        }
+        Long customerId = event.customerId();
         String trackingNumber = "PET-" + event.orderId() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         Shipment shipment = new Shipment(event.orderId(), customerId, ShipmentStatus.SHIPPED, trackingNumber);
         shipment.setShippedAt(Instant.now());

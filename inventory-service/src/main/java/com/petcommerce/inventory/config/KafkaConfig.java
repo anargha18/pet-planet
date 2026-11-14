@@ -3,52 +3,37 @@ package com.petcommerce.inventory.config;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.TopicBuilder;
 
+/**
+ * Topics this service PRODUCES (R-EVT-06): the producer owns and declares its topics; consumers only subscribe.
+ * Failed records go to "&lt;topic&gt;.DLT", created on first use.
+ */
 @Configuration
 public class KafkaConfig {
 
     @Bean
-    NewTopic orderCreatedEventsTopic() {
-        return new NewTopic("order-created-events", 1, (short) 1);
-    }
-
-    @Bean
-    NewTopic orderConfirmedEventsTopic() {
-        return new NewTopic("order-confirmed-events", 1, (short) 1);
-    }
-
-    @Bean
-    NewTopic orderCancelledEventsTopic() {
-        return new NewTopic("order-cancelled-events", 1, (short) 1);
-    }
-
-    @Bean
-    NewTopic paymentFailedEventsTopic() {
-        return new NewTopic("payment-failed-events", 1, (short) 1);
-    }
-
-    @Bean
     NewTopic petReservedEventsTopic() {
-        return new NewTopic("pet-reserved-events", 1, (short) 1);
+        return TopicBuilder.name("pet-reserved-events").partitions(1).replicas(1).build();
     }
 
     @Bean
     NewTopic petReservationFailedEventsTopic() {
-        return new NewTopic("pet-reservation-failed-events", 1, (short) 1);
+        return TopicBuilder.name("pet-reservation-failed-events").partitions(1).replicas(1).build();
     }
 
     @Bean
     NewTopic petReservationReleasedEventsTopic() {
-        return new NewTopic("pet-reservation-released-events", 1, (short) 1);
+        return TopicBuilder.name("pet-reservation-released-events").partitions(1).replicas(1).build();
     }
 
     @Bean
     NewTopic petReservationExpiredEventsTopic() {
-        return new NewTopic("pet-reservation-expired-events", 1, (short) 1);
+        return TopicBuilder.name("pet-reservation-expired-events").partitions(1).replicas(1).build();
     }
 
     @Bean
     NewTopic inventoryStatusEventsTopic() {
-        return new NewTopic("inventory-status-events", 1, (short) 1);
+        return TopicBuilder.name("inventory-status-events").partitions(1).replicas(1).build();
     }
 }

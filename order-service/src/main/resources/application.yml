@@ -24,12 +24,12 @@ spring:
       group-id: order-service
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "*"
+      # Values are plain JSON strings; platform-commons converts them to the listener's parameter type.
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # The outbox relay sends the stored JSON string as-is (no Java type headers).
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 management:
   endpoints:
@@ -56,3 +56,8 @@ springdoc:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+# Correlation ID of the event being processed (set by platform-commons from Kafka headers) in every log line.
+logging:
+  pattern:
+    level: "%5p [corr=%X{correlationId:-}]"

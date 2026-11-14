@@ -13,12 +13,10 @@ import com.petcommerce.inventory.messaging.event.PetReservationFailedEvent;
 import com.petcommerce.inventory.messaging.event.PetReservationReleasedEvent;
 import com.petcommerce.inventory.messaging.event.PetReservedEvent;
 import com.petcommerce.inventory.messaging.publisher.InventoryEventPublisher;
-import com.petcommerce.inventory.persistence.entity.ProcessedEvent;
 import com.petcommerce.inventory.persistence.repository.PetInventoryRepository;
 import com.petcommerce.inventory.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -62,15 +60,8 @@ public class InventoryService {
             return;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping already processed event {}", event.eventId());
-            return;
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException e) {
-            log.info("Duplicate event {} detected and ignored", event.eventId());
             return;
         }
 
@@ -132,15 +123,8 @@ public class InventoryService {
             return;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping already processed order-confirmed event {}", event.eventId());
-            return;
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("Duplicate order-confirmed event {} detected and ignored", event.eventId());
             return;
         }
 
@@ -167,15 +151,8 @@ public class InventoryService {
         if (event == null || event.orderId() == null) {
             return;
         }
-        if (event.eventId() != null && processedEventRepository.existsById(event.eventId())) {
+        if (event.eventId() != null && processedEventRepository.markProcessed(event.eventId()) == 0) {
             return;
-        }
-        if (event.eventId() != null) {
-            try {
-                processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-            } catch (DataIntegrityViolationException ex) {
-                return;
-            }
         }
         releaseOrderReservations(event.orderId(), event.correlationId());
     }
@@ -185,15 +162,8 @@ public class InventoryService {
         if (event == null || event.orderId() == null) {
             return;
         }
-        if (event.eventId() != null && processedEventRepository.existsById(event.eventId())) {
+        if (event.eventId() != null && processedEventRepository.markProcessed(event.eventId()) == 0) {
             return;
-        }
-        if (event.eventId() != null) {
-            try {
-                processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-            } catch (DataIntegrityViolationException ex) {
-                return;
-            }
         }
         releaseOrderReservations(event.orderId(), event.correlationId());
     }

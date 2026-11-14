@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,8 +37,6 @@ class NotificationServiceTest {
     @Mock
     private NotificationOutboxRepository notificationOutboxRepository;
 
-    @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -48,13 +45,15 @@ class NotificationServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Default: every event is seen for the first time; duplicate-handling tests override this.
+        lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
         lenient().when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(notificationOutboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         notificationService = new NotificationService(
                 notificationRepository,
                 processedEventRepository,
-                new NotificationEventPublisher(notificationOutboxRepository, kafkaTemplate, objectMapper)
+                new NotificationEventPublisher(notificationOutboxRepository, objectMapper)
         );
     }
 
@@ -62,7 +61,7 @@ class NotificationServiceTest {
     void handleOrderConfirmedEventSendsNotification() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 123L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(notificationRepository.findByOrderId(orderId)).thenReturn(Optional.empty());
 
         OrderConfirmedEvent event = new OrderConfirmedEvent(
@@ -73,6 +72,7 @@ class NotificationServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 List.of(UUID.randomUUID()),
                 BigDecimal.valueOf(120.00)
         );
@@ -100,7 +100,7 @@ class NotificationServiceTest {
     void duplicateOrderConfirmedEventIsIgnoredSafely() {
         UUID eventId = UUID.randomUUID();
         Long orderId = 456L;
-        when(processedEventRepository.existsById(eventId)).thenReturn(true);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(0);
         when(notificationRepository.findByOrderId(orderId)).thenReturn(Optional.empty());
 
         OrderConfirmedEvent event = new OrderConfirmedEvent(
@@ -111,6 +111,7 @@ class NotificationServiceTest {
                 Instant.now(),
                 UUID.randomUUID(),
                 orderId,
+                101L,
                 List.of(UUID.randomUUID()),
                 BigDecimal.valueOf(75.00)
         );

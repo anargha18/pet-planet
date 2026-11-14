@@ -5,12 +5,10 @@ import com.petcommerce.delivery.domain.model.DeliveryStatus;
 import com.petcommerce.delivery.messaging.event.DeliveryStatusUpdatedEvent;
 import com.petcommerce.delivery.messaging.event.ShipmentCreatedEvent;
 import com.petcommerce.delivery.messaging.publisher.DeliveryEventPublisher;
-import com.petcommerce.delivery.persistence.entity.ProcessedEvent;
 import com.petcommerce.delivery.persistence.repository.DeliveryRecordRepository;
 import com.petcommerce.delivery.persistence.repository.ProcessedEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,15 +50,8 @@ public class DeliveryTrackingService {
             return null;
         }
 
-        if (processedEventRepository.existsById(event.eventId())) {
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
             log.info("Skipping already processed ShipmentCreatedEvent {}", event.eventId());
-            return deliveryRecordRepository.findByOrderId(event.orderId()).orElse(null);
-        }
-
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(event.eventId()));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("Duplicate ShipmentCreatedEvent {} detected and ignored", event.eventId());
             return deliveryRecordRepository.findByOrderId(event.orderId()).orElse(null);
         }
 
@@ -70,7 +61,11 @@ public class DeliveryTrackingService {
             return existing;
         }
 
-        Long customerId = event.customerId() != null ? event.customerId() : 101L;
+        if (event.customerId() == null) {
+            // Required field: fail so the record is retried and then dead-lettered (R-EVT-07), never guessed.
+            throw new IllegalArgumentException("Event " + event.eventId() + " for order " + event.orderId() + " has no customerId");
+        }
+        Long customerId = event.customerId();
         DeliveryRecord delivery = new DeliveryRecord(event.orderId(), customerId, event.trackingNumber(), DeliveryStatus.IN_TRANSIT);
         deliveryRecordRepository.save(delivery);
 

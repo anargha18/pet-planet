@@ -15,7 +15,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.Environment;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,8 +37,6 @@ class PaymentServiceTest {
     @Mock
     private PaymentOutboxRepository paymentOutboxRepository;
 
-    @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
     private Environment environment;
@@ -48,11 +45,13 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Default: every event is seen for the first time; duplicate-handling tests override this.
+        lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
         when(environment.getProperty("payment.simulation-result", "SUCCESS")).thenReturn("SUCCESS");
         paymentService = new PaymentService(
                 paymentRepository,
                 processedEventRepository,
-                new PaymentEventPublisher(paymentOutboxRepository, kafkaTemplate, new ObjectMapper().findAndRegisterModules()),
+                new PaymentEventPublisher(paymentOutboxRepository, new ObjectMapper().findAndRegisterModules()),
                 environment
         );
     }
@@ -69,10 +68,11 @@ class PaymentServiceTest {
                 UUID.randomUUID(),
                 42L,
                 UUID.randomUUID(),
-                UUID.randomUUID()
+                UUID.randomUUID(),
+                null
         );
 
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(paymentRepository.findByOrderId(42L)).thenReturn(Optional.empty());
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> {
             Payment payment = invocation.getArgument(0);
@@ -99,10 +99,11 @@ class PaymentServiceTest {
                 UUID.randomUUID(),
                 101L,
                 UUID.randomUUID(),
-                UUID.randomUUID()
+                UUID.randomUUID(),
+                null
         );
 
-        when(processedEventRepository.existsById(eventId)).thenReturn(true);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(0);
         when(paymentRepository.findByOrderId(101L)).thenReturn(Optional.of(new Payment(101L, BigDecimal.valueOf(1000), "USD", PaymentStatus.SUCCEEDED, "txn-123")));
 
         Payment payment = paymentService.handlePetReservedEvent(event);
@@ -118,7 +119,7 @@ class PaymentServiceTest {
         paymentService = new PaymentService(
                 paymentRepository,
                 processedEventRepository,
-                new PaymentEventPublisher(paymentOutboxRepository, kafkaTemplate, new ObjectMapper().findAndRegisterModules()),
+                new PaymentEventPublisher(paymentOutboxRepository, new ObjectMapper().findAndRegisterModules()),
                 environment
         );
 
@@ -132,10 +133,11 @@ class PaymentServiceTest {
                 UUID.randomUUID(),
                 77L,
                 UUID.randomUUID(),
-                UUID.randomUUID()
+                UUID.randomUUID(),
+                null
         );
 
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(1);
         when(paymentRepository.findByOrderId(77L)).thenReturn(Optional.empty());
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
