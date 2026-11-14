@@ -6,6 +6,7 @@ Pet Planet is an event-driven pet e-commerce platform comprising ten Java 17 / S
 
 | File | Consult when working on |
 |---|---|
+| [Event catalog](./events.md) | Kafka wire format, outbox relay, retries and dead-letter topics, idempotency, topic ownership and payload fields |
 | [Architecture](./architecture.md) | Service boundaries, gateway routing, event workflows, saga compensation, outbox relay |
 | [Code structure](./code-structure.md) | Repository layout, per-service package layout, frontend feature folders, and the enforced boundary rules |
 | [Backend overview](./backend/README.md) | Java service inventory, shared conventions, and links to service-specific notes |

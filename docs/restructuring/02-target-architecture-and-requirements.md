@@ -397,6 +397,36 @@ Deviations:
 - `TokenIssuer` uses JJWT (the gateway's existing, verbatim signing code) instead of Spring's `JwtEncoder`, so the token format stays identical for the services that verify tokens today. Switching both sides belongs with R-SEC-02 (Phase 3).
 - The unused gateway→user-service `/internal/users/*` endpoints were removed.
 
+**Phase 1: done (2026-11-14).**
+- New `platform-commons` module (infrastructure only), Spring Boot auto-configured:
+  - wire format: plain JSON strings, with a `StringJsonMessageConverter` that infers the listener parameter type (R-EVT-01);
+  - failures: `DefaultErrorHandler` with 3 retries, then `<topic>.DLT` (R-EVT-04);
+  - log correlation: MDC from the `correlationId`/`eventType`/`eventId` headers (R-EVT-08, Kafka side);
+  - publishing: a generic `OutboxRelay` that locks rows (`FOR UPDATE SKIP LOCKED`), sends with a blocking acknowledgement, and records `attempts`/`last_error` (R-EVT-03).
+- All 8 producers write outbox rows only; catalog got an outbox (`V3__catalog_outbox.sql`). The outbox `event_id` now equals the payload `eventId` (previously random).
+- `markProcessed` = `INSERT … ON CONFLICT DO NOTHING` (R-EVT-05).
+- `101L` fallbacks and secondary event constructors removed (R-EVT-07); producers declare only their own topics (R-EVT-06).
+- Root-context Dockerfiles (R-INF-02 complete); Kafka UI behind the `tools` profile (R-INF-07).
+- New docs: [events.md](../project-context/events.md) (R-DOC-02).
+- Tests: `OutboxRelayTest` and a real-Kafka Testcontainers test in commons; consumer contract tests built from real captured producer JSON in all 8 consuming services (R-TEST-01, part). 180 tests pass.
+
+Verified on the running stack, with the existing database kept and only new migrations applied:
+- The order left stuck at `CREATED` in Phase 0b was consumed from its old-format message and completed (`PAID`, all downstream records, catalog `SOLD`).
+- A new order reached `PAID` in 0.9 s, with payment `SUCCEEDED` (950.00), shipment, delivery `IN_TRANSIT`, fulfillment `SHIPPED`, notification `SENT` (real `customerId 2`) and catalog `SOLD`.
+- All 8 outbox tables are fully published with no errors; one `correlationId` was followed across inventory, notification and shipping logs.
+- A poison message sent to `shipment-created-events` landed in `shipment-created-events.DLT`, consumer lag returned to 0, and the service stayed healthy.
+
+Not done or not verified in Phase 1:
+- The full R-EVT-02 envelope (`causationId`, `producer`, `aggregateType`, `aggregateId` = order ID).
+- HTTP-request MDC (R-EVT-08, HTTP side).
+- Per-service Testcontainers tests against Kafka and PostgreSQL (rest of R-TEST-01).
+- Retiring `fulfillment-updated-events` / `pet-reservation-released-events` (moved to Phase 4, where fulfillment changes role).
+- Compensation paths: re-verified in Phase 2.
+
+Deviation: instead of `ErrorHandlingDeserializer` + per-listener default types, values use `StringDeserializer` plus a JSON message converter that infers the type from the listener signature. It's simpler, needs no per-listener configuration, and a deserializer can't fail at poll time. The plan's R-EVT-01 intent (no shared classes, no type headers) is met.
+
+Note: a single service is now built with `./mvnw -pl <service> -am …` (it needs `platform-commons` from the reactor).
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.
