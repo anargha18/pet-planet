@@ -1,11 +1,10 @@
 package com.petcommerce.inventory.messaging.event;
 
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
-public record OrderConfirmedEvent(
+/** Published when payment succeeded but the pets of the order were no longer reserved for it. */
+public record InventorySaleConflictEvent(
         UUID eventId,
         String eventType,
         Integer eventVersion,
@@ -13,8 +12,6 @@ public record OrderConfirmedEvent(
         Instant timestamp,
         UUID correlationId,
         Long orderId,
-        Long customerId,
-        List<UUID> petIds,
-        BigDecimal totalAmount
+        String reason
 ) {
 }

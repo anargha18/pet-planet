@@ -13,7 +13,8 @@ public record OrderCancelledEvent(
         UUID correlationId,
         Long orderId,
         Long customerId,
-        List<UUID> petIds
+        List<UUID> petIds,
+        String reason
 ) {
 }
 

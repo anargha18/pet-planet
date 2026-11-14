@@ -42,7 +42,8 @@ management:
         enabled: true
 
 inventory:
-  reservation-expiration-minutes: ${INVENTORY_RESERVATION_EXPIRATION_MINUTES:5}
+  # ISO-8601 duration (R-SAGA-08), e.g. PT5M; the smoke test uses seconds to exercise expiry.
+  reservation-timeout: ${INVENTORY_RESERVATION_TIMEOUT:PT5M}
   expiration-check-delay-ms: ${INVENTORY_EXPIRATION_CHECK_DELAY_MS:30000}
 
 jwt:

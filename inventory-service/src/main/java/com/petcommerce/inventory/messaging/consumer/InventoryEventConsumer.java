@@ -1,11 +1,11 @@
 package com.petcommerce.inventory.messaging.consumer;
 
-import com.petcommerce.inventory.messaging.event.OrderCancelledEvent;
-import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
-import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
-import com.petcommerce.inventory.messaging.event.PaymentFailedEvent;
-import com.petcommerce.inventory.messaging.event.PetCatalogEvent;
 import com.petcommerce.inventory.application.InventoryService;
+import com.petcommerce.inventory.messaging.event.OrderCancelledEvent;
+import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
+import com.petcommerce.inventory.messaging.event.OrderFailedEvent;
+import com.petcommerce.inventory.messaging.event.PaymentSucceededEvent;
+import com.petcommerce.inventory.messaging.event.PetCatalogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -28,27 +28,27 @@ public class InventoryEventConsumer {
         inventoryService.handleOrderCreatedEvent(event);
     }
 
-    @KafkaListener(topics = "order-confirmed-events", groupId = "inventory-service")
-    public void onOrderConfirmed(OrderConfirmedEvent event) {
-        log.info("Received OrderConfirmedEvent for order {} with {} pets", event.orderId(), event.petIds().size());
-        inventoryService.handleOrderConfirmedEvent(event);
-    }
-
-    @KafkaListener(topics = "payment-failed-events", groupId = "inventory-service")
-    public void onPaymentFailed(PaymentFailedEvent event) {
-        log.warn("Received PaymentFailedEvent for order {} — releasing reserved pets", event.orderId());
-        inventoryService.handlePaymentFailedEvent(event);
+    @KafkaListener(topics = "payment-succeeded-events", groupId = "inventory-service")
+    public void onPaymentSucceeded(PaymentSucceededEvent event) {
+        log.info("Received PaymentSucceededEvent for order {}: completing the sale", event.orderId());
+        inventoryService.handlePaymentSucceededEvent(event);
     }
 
     @KafkaListener(topics = "order-cancelled-events", groupId = "inventory-service")
     public void onOrderCancelled(OrderCancelledEvent event) {
-        log.info("Received OrderCancelledEvent for order {} — releasing reserved pets", event.orderId());
+        log.info("Received OrderCancelledEvent for order {} ({}): releasing reserved pets", event.orderId(), event.reason());
         inventoryService.handleOrderCancelledEvent(event);
+    }
+
+    @KafkaListener(topics = "order-failed-events", groupId = "inventory-service")
+    public void onOrderFailed(OrderFailedEvent event) {
+        log.info("Received OrderFailedEvent for order {} ({}): releasing reserved pets", event.orderId(), event.reason());
+        inventoryService.handleOrderFailedEvent(event);
     }
 
     @KafkaListener(topics = "pet-catalog-events", groupId = "inventory-service")
     public void onPetCatalogEvent(PetCatalogEvent event) {
-        log.info("Received PetCatalogEvent for pet {}", event.petId());
+        log.info("Received {} for pet {}", event.eventType(), event.petId());
         inventoryService.handlePetCatalogEvent(event);
     }
 }

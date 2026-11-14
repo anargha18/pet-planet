@@ -33,6 +33,16 @@ public class KafkaConfig {
     }
 
     @Bean
+    NewTopic petsSoldEventsTopic() {
+        return TopicBuilder.name("pets-sold-events").partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    NewTopic inventorySaleConflictEventsTopic() {
+        return TopicBuilder.name("inventory-sale-conflict-events").partitions(1).replicas(1).build();
+    }
+
+    @Bean
     NewTopic inventoryStatusEventsTopic() {
         return TopicBuilder.name("inventory-status-events").partitions(1).replicas(1).build();
     }

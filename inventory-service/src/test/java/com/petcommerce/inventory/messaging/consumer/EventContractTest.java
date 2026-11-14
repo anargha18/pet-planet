@@ -3,8 +3,10 @@ package com.petcommerce.inventory.messaging.consumer;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
+import com.petcommerce.inventory.messaging.event.OrderCancelledEvent;
 import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
+import com.petcommerce.inventory.messaging.event.OrderFailedEvent;
+import com.petcommerce.inventory.messaging.event.PaymentSucceededEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
@@ -38,15 +40,36 @@ class EventContractTest {
     }
 
     @Test
-    void consumesOrderConfirmedAsProduced() throws Exception {
-        OrderConfirmedEvent event = read("order-confirmed-events", OrderConfirmedEvent.class);
+    void consumesPaymentSucceededAsProduced() throws Exception {
+        PaymentSucceededEvent event = read("payment-succeeded-events", PaymentSucceededEvent.class);
+
+        assertNotNull(event.eventId(), "eventId");
+        assertNotNull(event.orderId(), "orderId");
+        assertNotNull(event.paymentId(), "paymentId");
+        assertNotNull(event.amount(), "amount");
+        assertNotNull(event.correlationId(), "correlationId");
+    }
+
+    @Test
+    void consumesOrderFailedAsProduced() throws Exception {
+        OrderFailedEvent event = read("order-failed-events", OrderFailedEvent.class);
 
         assertNotNull(event.eventId(), "eventId");
         assertNotNull(event.orderId(), "orderId");
         assertNotNull(event.customerId(), "customerId");
         assertNotNull(event.petIds(), "petIds");
-        assertNotNull(event.totalAmount(), "totalAmount");
-        assertNotNull(event.correlationId(), "correlationId");
+        assertNotNull(event.reason(), "reason");
+    }
+
+    @Test
+    void consumesOrderCancelledAsProduced() throws Exception {
+        OrderCancelledEvent event = read("order-cancelled-events", OrderCancelledEvent.class);
+
+        assertNotNull(event.eventId(), "eventId");
+        assertNotNull(event.orderId(), "orderId");
+        assertNotNull(event.customerId(), "customerId");
+        assertNotNull(event.petIds(), "petIds");
+        assertNotNull(event.reason(), "reason");
     }
 
     private static <T> T read(String topic, Class<T> type) throws Exception {
