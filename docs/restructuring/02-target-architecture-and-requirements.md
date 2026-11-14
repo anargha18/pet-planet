@@ -461,6 +461,29 @@ Not done or not verified in Phase 2:
 - No admin delivery step in the smoke test (Phase 4).
 - `KafkaPlatformIntegrationTest` can flake when the full stack is also running on a 4 GB VM (passes on rerun).
 
+**Phase 3: done (2026-11-14).**
+- `platform-commons` gained `security` (`PlatformJwt` token contract and claim mapping, `PlatformHttpSecurity`, `AuthenticatedCaller`) and `web` (`ApiError`, `PlatformExceptionHandler`, `CorrelationIdFilter`), auto-configured with optional dependencies; its test-jar ships `TestJwtIssuer`.
+- R-SEC-02: all 9 servlet services use `spring-boot-starter-oauth2-resource-server`; every hand-rolled `JwtService`/`JwtAuthenticationFilter` and all JJWT dependencies were deleted. The gateway is a WebFlux resource server using the same `PlatformJwt` rules. user-service signs with Nimbus `JwtEncoder` (the R-SEC-01 deviation from Phase 0b is closed); `sub` is now the user ID.
+- R-SEC-04: `GatewayAuthFilter.forwardIfOrderOwned` and the customer-ID path check were removed. Ownership is enforced in order (existing `OrderAccessPolicy`), payment, notification, shipping, delivery-tracking and fulfillment; user-service `/me` uses the token instead of `X-Authenticated-User-Id`.
+- R-SEC-05: the gateway denies `/internal/**` (and routes no such path).
+- R-SEC-06: those 5 services return DTOs; one `ApiError` body everywhere (gateway, Spring Security 401/403, user-service internal-token filter, all exception handlers); missing records → 404 (inventory unknown pet now 404).
+- R-INF-08: `.env.example` placeholders, `scripts/generate-dev-keys.sh` (`make keys`, run by `up`/`infra`), compose `x-jwt-verify-env` anchor with required variables, no key defaults in `application.yml`. `git grep "BEGIN PRIVATE\|MIIEv"` matches only this document's own acceptance text.
+- R-EVT-08 (HTTP side, part): `X-Correlation-Id` assigned at the gateway, put into the MDC by every service and returned in error bodies.
+
+Verified: `./mvnw test` BUILD SUCCESS (all 11 modules); frontend build + boundaries OK; stack rebuilt with `make up` (existing data kept, payment `V4` applied, all 13 containers healthy); `make smoke` **49/49**, including new scenario S (a second customer gets 403 on another customer's order/payment/shipment/notification/delivery/fulfillment, owner and admin 200, shared 401/403 bodies). New payments store `customer_id`.
+
+Deviations:
+- Shared security and error code live in `platform-commons`, which widens DEC-3 beyond Kafka/outbox (still infrastructure only, no domain code).
+- payment had no `customerId` (the plan assumed every service stored it): migration `V4` adds `customer_id`, filled from a new additive `PetReservedEvent.customerId`. Payments created earlier have no owner and are admin-only.
+- Foreign records return 403 (as order-service already did), not 404.
+- Gateway CORS now runs inside the security chain (`CorsConfigurationSource`), so 401/403 responses carry CORS headers.
+- The frontend's `extractApiError` now prefers `message` (needed for the new body); the rest of the frontend work stays in Phase 5.
+
+Not done or not verified in Phase 3:
+- The old development key pair is still in git history (not rewritten).
+- order-service does not yet use the HTTP correlation ID as the saga's `correlationId` (events still start a new one).
+- A one-off 688 s run of payment's `ArchitectureTest` during the full build could not be reproduced (0.8 s on rerun).
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.

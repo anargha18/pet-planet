@@ -6,7 +6,9 @@ Application HTTP APIs are exposed through **`gateway-service` (`http://localhost
 
 The gateway routes `/api/v1/auth/**` and `/api/v1/users/**` to the internal `user-service:8088`, `/api/v1/pets/**` to `pet-catalog-service:8080`, `/api/v1/orders/**` to `order-service:8081`, `/api/v1/inventory/**` to `inventory-service:8082`, `/api/v1/payments/**` to `payment-service:8083`, `/api/v1/notifications/**` to `notification-service:8084`, `/api/v1/shipments/**` to `shipping-service:8085`, `/api/v1/deliveries/**` to `delivery-tracking-service:8086`, and `/api/v1/fulfillment/**` to `fulfillment-service:8087`.
 
-All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. `POST /api/v1/auth/register` and `POST /api/v1/auth/login` are public and served by user-service, which issues the token. Catalog writes and inventory routes require `ADMIN`; order routes require `USER` or `ADMIN`; user management endpoints have the rules listed below. Customer-specific lists and tracking lookups are owner-scoped at the gateway; domain services retain relevant token and ownership checks as defense in depth.
+All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. `POST /api/v1/auth/register` and `POST /api/v1/auth/login` are public and served by user-service, which issues the token. The gateway applies only coarse rules (admin-only prefixes: user management, catalog writes, inventory, the two `…/delivered` endpoints); `/internal/**` is never reachable. **Every service validates the token again and enforces ownership itself**: a `USER` gets `403` for another customer's records, an `ADMIN` may read any. See [security.md](./security.md).
+
+**Errors.** Every error response, from the gateway or any service, has the same body: `{ "status", "error", "message", "path", "timestamp", "correlationId" }`. `401` = missing/invalid/expired token, `403` = role or ownership, `404` = not found, `409` = invalid state, `400` = validation or malformed JSON. Responses carry an `X-Correlation-Id` header (the same value as `correlationId`).
 
 ## Authentication (`user-service`, via the gateway)
 
@@ -17,7 +19,7 @@ All routed requests except catalog `GET` and CORS preflight requests require a v
 
 ## User management (`user-service`, internal port 8088)
 
-The gateway authorizes these operations and passes a trusted authenticated user ID for self-service endpoints. User-service endpoints require the gateway/user-service internal token.
+Self-service (`/me`) endpoints take the user ID from the verified token; user administration requires `ADMIN` (checked at the gateway and again in user-service). User-service endpoints also require the gateway/user-service internal token, which the gateway adds.
 
 | Method/path | Request and behavior | Response/status/access |
 |---|---|---|
@@ -57,14 +59,24 @@ All `/api/v1/inventory/**` endpoints require `ADMIN`. Inventory is **read-only**
 
 | Method/path | Purpose | Response/status |
 |---|---|---|
-| `GET /api/v1/inventory/pets/{petId}` | Returns inventory status for UUID `petId`. | `InventoryResponse`, `200 OK`. |
+| `GET /api/v1/inventory/pets/{petId}` | Returns inventory status for UUID `petId`. | `InventoryResponse`, `200 OK`; `404` if inventory has no record of the pet. |
 
 ## Payments, notifications, shipping, delivery, and fulfillment
 
-These APIs require a valid gateway bearer token. Existing service-level ownership checks apply where implemented.
+All require a valid bearer token (`USER` or `ADMIN`). Each service checks ownership itself: `…/order/{orderId}` returns the record only if the caller owns the order (or is an admin), otherwise `403`; `404` if there is no record. `…/customer/{customerId}` is allowed only for the caller's own user ID (or an admin), otherwise `403`. Responses are DTOs (never JPA entities).
 
-- `GET /api/v1/payments/order/{orderId}`: payment record by numeric order ID. `status` is `PROCESSING`, `SUCCEEDED`, `FAILED` or `REFUNDED`, plus `refundedAt` and `refundReason` when refunded.
-- `GET /api/v1/notifications/order/{orderId}`, `GET /api/v1/notifications/customer/{customerId}`.
-- `GET /api/v1/shipments/order/{orderId}`, `GET /api/v1/shipments/customer/{customerId}`, `PUT /api/v1/shipments/order/{orderId}/delivered`.
-- `GET /api/v1/deliveries/order/{orderId}`, `GET /api/v1/deliveries/customer/{customerId}`, `PUT /api/v1/deliveries/order/{orderId}/delivered`.
-- `GET /api/v1/fulfillment/order/{orderId}`, `GET /api/v1/fulfillment/customer/{customerId}`.
+| Method/path | Response (`200 OK`) | Access |
+|---|---|---|
+| `GET /api/v1/payments/order/{orderId}` | `PaymentResponse`: `paymentId`, `orderId`, `customerId`, `amount`, `currency`, `status` (`PROCESSING`/`SUCCEEDED`/`FAILED`/`REFUNDED`), `transactionReference`, `createdAt`, `updatedAt`, `refundedAt`, `refundReason` | owner or `ADMIN`; payments created before payment `V4` have `customerId` `null` and are visible to `ADMIN` only |
+| `GET /api/v1/notifications/order/{orderId}` | `NotificationResponse`: `id`, `orderId`, `customerId`, `message`, `status`, `createdAt`, `sentAt` | owner or `ADMIN` |
+| `GET /api/v1/notifications/customer/{customerId}` | `NotificationResponse[]` | self or `ADMIN` |
+| `GET /api/v1/shipments/order/{orderId}` | `ShipmentResponse`: `id`, `orderId`, `customerId`, `status`, `trackingNumber`, `createdAt`, `shippedAt`, `deliveredAt` | owner or `ADMIN` |
+| `GET /api/v1/shipments/customer/{customerId}` | `ShipmentResponse[]` | self or `ADMIN` |
+| `PUT /api/v1/shipments/order/{orderId}/delivered` | `ShipmentResponse`; `404` if no shipment | `ADMIN` |
+| `GET /api/v1/deliveries/order/{orderId}` | `DeliveryResponse`: `id`, `orderId`, `customerId`, `trackingNumber`, `status`, `createdAt`, `updatedAt`, `deliveredAt` | owner or `ADMIN` |
+| `GET /api/v1/deliveries/customer/{customerId}` | `DeliveryResponse[]` | self or `ADMIN` |
+| `PUT /api/v1/deliveries/order/{orderId}/delivered` | `DeliveryResponse`; `404` if no delivery | `ADMIN` |
+| `GET /api/v1/fulfillment/order/{orderId}` | `FulfillmentResponse`: `id`, `orderId`, `customerId`, `trackingNumber`, `status`, `lastUpdatedAt`, `notes` | owner or `ADMIN` |
+| `GET /api/v1/fulfillment/customer/{customerId}` | `FulfillmentResponse[]` | self or `ADMIN` |
+
+The two `…/delivered` endpoints still overlap (shipping's emits no event); consolidating them is Phase 4 (audit S9).

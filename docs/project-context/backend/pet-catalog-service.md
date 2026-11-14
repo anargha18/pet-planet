@@ -8,3 +8,4 @@
 - `availabilityStatus` is a read-only copy of inventory's state (`AVAILABLE`, `RESERVED`, `SOLD`, `RETIRED`). `PUT` cannot change it (R-SAGA-05).
 - `DELETE /api/v1/pets/{petId}` **archives** an `AVAILABLE` pet: `RETIRED`, `PetArchivedEvent` via `catalog_outbox`, hidden from the default listing. `RESERVED`/`SOLD` pets return `409` (`PetNotArchivableException`). Rows are never hard-deleted, so order snapshots remain valid.
 - Catalog events (`PetCreatedEvent`, `PetArchivedEvent`) go through the transactional outbox (`catalog_outbox`).
+- HTTP security: JWT validated by the shared platform-commons resource server (no service-local JWT code); errors use the shared `ApiError` body (not found → 404, not archivable → 409).

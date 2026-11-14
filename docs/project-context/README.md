@@ -25,7 +25,7 @@ Pet Planet is an event-driven pet e-commerce platform comprising ten Java 17 / S
 - Java 17, Spring Boot 3.5.5, Spring Cloud Gateway 2025.0.0, Maven, Spring Data JPA/Hibernate, Flyway, Spring Kafka.
 - PostgreSQL 16 Alpine and Apache Kafka 4.0.1 (KRaft mode) in the local Compose configuration.
 - React 18.3.1, React Router 6.28.0, Vite 5.4.10, Material UI 5.16.x, Axios 1.7.x.
-- Spring Security, JJWT 0.12.6 (RS256 asymmetric keys), and BCrypt.
+- Spring Security OAuth2 resource server and Nimbus `JwtEncoder` (RS256 asymmetric keys), and BCrypt.
 
 ## Current overall status
 
