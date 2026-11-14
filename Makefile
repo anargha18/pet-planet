@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down reset infra kafka-ui build logs ps test frontend-check
+.PHONY: help up down reset infra kafka-ui build logs ps test smoke frontend-check
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -39,6 +39,9 @@ ps: ## Show container status and health
 
 test: ## Run all backend tests (unit + architecture rules) with the Maven wrapper
 	./mvnw -B test
+
+smoke: ## End-to-end saga + compensation checks against the running stack (restarts payment/inventory)
+	scripts/smoke-test.sh
 
 frontend-check: ## Build the frontend and check its folder boundaries
 	cd frontend && npm run check:boundaries && npm run build
