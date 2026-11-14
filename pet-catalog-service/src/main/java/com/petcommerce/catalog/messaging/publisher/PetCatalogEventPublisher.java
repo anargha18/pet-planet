@@ -27,25 +27,34 @@ public class PetCatalogEventPublisher {
     }
 
     public void publishPetCreated(Pet savedPet) {
-        if (savedPet.getId() == null) {
+        publish(savedPet, "PetCreatedEvent");
+    }
+
+    /** Inventory retires the pet (AVAILABLE -> RETIRED). */
+    public void publishPetArchived(Pet pet) {
+        publish(pet, "PetArchivedEvent");
+    }
+
+    private void publish(Pet pet, String eventType) {
+        if (pet.getId() == null) {
             return;
         }
         UUID eventId = UUID.randomUUID();
         PetCatalogEvent event = new PetCatalogEvent(
                 eventId,
-                "PetCreatedEvent",
+                eventType,
                 1,
-                savedPet.getId(),
-                savedPet.getAvailabilityStatus().name(),
+                pet.getId(),
+                pet.getAvailabilityStatus().name(),
                 Instant.now()
         );
         outboxRepository.save(new CatalogOutboxEvent(
                 eventId,
                 "pet-catalog-events",
-                "PetCreatedEvent",
-                savedPet.getId(),
+                eventType,
+                pet.getId(),
                 null,
-                savedPet.getId().toString(),
+                pet.getId().toString(),
                 OutboxPayloads.toJson(objectMapper, event),
                 Instant.now()
         ));

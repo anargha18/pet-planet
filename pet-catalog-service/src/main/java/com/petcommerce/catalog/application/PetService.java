@@ -4,6 +4,7 @@ import com.petcommerce.catalog.api.dto.CreatePetRequest;
 import com.petcommerce.catalog.api.dto.PetResponse;
 import com.petcommerce.catalog.api.dto.UpdatePetRequest;
 import com.petcommerce.catalog.api.mapper.PetMapper;
+import com.petcommerce.catalog.domain.exception.PetNotArchivableException;
 import com.petcommerce.catalog.domain.exception.PetNotFoundException;
 import com.petcommerce.catalog.domain.model.AvailabilityStatus;
 import com.petcommerce.catalog.domain.model.Pet;
@@ -84,6 +85,9 @@ public class PetService {
         log.debug("Searching pets species={}, breed={}, minPrice={}, maxPrice={}, availabilityStatus={}, page={}, size={}",
                 species, breed, minPrice, maxPrice, availabilityStatus, pageable.getPageNumber(), pageable.getPageSize());
         Specification<Pet> specification = PetSpecifications.search(species, breed, minPrice, maxPrice, availabilityStatus);
+        if (availabilityStatus == null) {
+            specification = specification.and(PetSpecifications.notRetired());
+        }
 
         Page<PetResponse> results = petRepository.findAll(specification, pageable).map(PetMapper::toResponse);
         log.debug("Pet search returned {} results out of {}", results.getNumberOfElements(), results.getTotalElements());
@@ -94,17 +98,29 @@ public class PetService {
     public PetResponse update(UUID petId, UpdatePetRequest request) {
         Pet pet = findPet(petId);
         apply(pet, request);
-        pet.setAvailabilityStatus(request.availabilityStatus());
+        // availabilityStatus is owned by inventory and not changeable here (R-SAGA-05).
         Pet updatedPet = petRepository.save(pet);
         log.info("Updated pet id={}, availabilityStatus={}", petId, updatedPet.getAvailabilityStatus());
         return PetMapper.toResponse(updatedPet);
     }
 
     @Transactional
-    public void delete(UUID petId) {
+    /**
+     * Archives (soft-deletes) a pet: it becomes RETIRED, disappears from the default listing, and inventory retires it.
+     * The row is kept so order snapshots and history stay valid. Reserved or sold pets cannot be archived.
+     */
+    public void archive(UUID petId) {
         Pet pet = findPet(petId);
-        petRepository.delete(pet);
-        log.info("Deleted pet id={}", petId);
+        if (pet.getAvailabilityStatus() == AvailabilityStatus.RETIRED) {
+            return;
+        }
+        if (pet.getAvailabilityStatus() != AvailabilityStatus.AVAILABLE) {
+            throw new PetNotArchivableException(petId, pet.getAvailabilityStatus().name());
+        }
+        pet.setAvailabilityStatus(AvailabilityStatus.RETIRED);
+        petRepository.save(pet);
+        petCatalogEventPublisher.publishPetArchived(pet);
+        log.info("Archived pet id={}", petId);
     }
 
     private Pet findPet(UUID petId) {

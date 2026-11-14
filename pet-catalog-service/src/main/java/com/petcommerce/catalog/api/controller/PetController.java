@@ -73,8 +73,8 @@ public class PetController {
 
     @DeleteMapping("/{petId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Delete a pet")
+    @Operation(summary = "Archive a pet (soft delete; 409 if reserved or sold)")
     public void delete(@PathVariable UUID petId) {
-        petService.delete(petId);
+        petService.archive(petId);
     }
 }

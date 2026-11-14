@@ -44,4 +44,10 @@ public final class PetSpecifications {
         return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
         };
     }
+
+    /** Excludes archived pets; applied when the caller does not filter by availability explicitly. */
+    public static Specification<Pet> notRetired() {
+        return (root, query, criteriaBuilder) ->
+                criteriaBuilder.notEqual(root.get("availabilityStatus"), AvailabilityStatus.RETIRED);
+    }
 }
