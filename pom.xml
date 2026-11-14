@@ -6,8 +6,8 @@
 
     <!--
       Root aggregator: builds and tests every service with one command (./mvnw verify).
-      Services keep their own spring-boot-starter-parent for now; a shared parent for
-      dependency versions is introduced together with platform-commons (Phase 1).
+      platform-commons (shared Kafka/outbox infrastructure) is built first; services keep their own
+      spring-boot-starter-parent.
     -->
     <groupId>com.petcommerce</groupId>
     <artifactId>pet-planet</artifactId>
@@ -16,6 +16,7 @@
     <name>pet-planet</name>
 
     <modules>
+        <module>platform-commons</module>
         <module>gateway-service</module>
         <module>user-service</module>
         <module>pet-catalog-service</module>
