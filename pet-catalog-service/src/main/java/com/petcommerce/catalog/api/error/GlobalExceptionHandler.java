@@ -1,5 +1,6 @@
 package com.petcommerce.catalog.api.error;
 
+import com.petcommerce.catalog.domain.exception.PetNotArchivableException;
 import com.petcommerce.catalog.domain.exception.PetNotFoundException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +26,12 @@ public class GlobalExceptionHandler {
         log.warn("Pet request failed with not found: method={}, path={}",
             request.getMethod(), request.getRequestURI());
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), List.of(request.getRequestURI()));
+    }
+
+    @ExceptionHandler(PetNotArchivableException.class)
+    public ResponseEntity<ApiError> handleNotArchivable(PetNotArchivableException exception, HttpServletRequest request) {
+        log.warn("Pet archive rejected: method={}, path={}", request.getMethod(), request.getRequestURI());
+        return response(HttpStatus.CONFLICT, exception.getMessage(), List.of(request.getRequestURI()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
