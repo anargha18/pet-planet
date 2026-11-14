@@ -1,41 +1,50 @@
 package com.petcommerce.inventory.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.petcommerce.inventory.application.InventoryService;
 import com.petcommerce.inventory.domain.model.InventoryStatus;
 import com.petcommerce.inventory.domain.model.PetInventory;
-import com.petcommerce.inventory.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.inventory.messaging.event.OrderCreatedEvent;
+import com.petcommerce.inventory.messaging.event.OrderFailedEvent;
+import com.petcommerce.inventory.messaging.event.PaymentSucceededEvent;
+import com.petcommerce.inventory.messaging.event.PetCatalogEvent;
 import com.petcommerce.inventory.messaging.publisher.InventoryEventPublisher;
+import com.petcommerce.inventory.persistence.entity.InventoryOutboxEvent;
 import com.petcommerce.inventory.persistence.repository.InventoryOutboxRepository;
 import com.petcommerce.inventory.persistence.repository.PetInventoryRepository;
 import com.petcommerce.inventory.persistence.repository.ProcessedEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.env.Environment;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class InventoryServiceTest {
 
+    private static final long ORDER_ID = 42L;
+
     @Mock
     private PetInventoryRepository petInventoryRepository;
-
-
-    @Mock
-    private Environment environment;
 
     @Mock
     private ProcessedEventRepository processedEventRepository;
@@ -49,132 +58,152 @@ class InventoryServiceTest {
     void setUp() {
         // Default: every event is seen for the first time; duplicate-handling tests override this.
         lenient().when(processedEventRepository.markProcessed(any())).thenReturn(1);
-        when(environment.getProperty("inventory.reservation-expiration-minutes", "5")).thenReturn("5");
+        lenient().when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
         inventoryService = new InventoryService(
                 petInventoryRepository,
                 processedEventRepository,
                 new InventoryEventPublisher(inventoryOutboxRepository, new ObjectMapper().findAndRegisterModules()),
-                environment
+                Duration.ofMinutes(5)
         );
     }
 
-    @Test
-    void reservePetSuccessfully() {
-        UUID petId = UUID.randomUUID();
-        when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.empty());
-        when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        PetInventory inventory = inventoryService.reservePet(petId, UUID.randomUUID());
-
-        assertEquals(InventoryStatus.RESERVED, inventory.getStatus());
-        assertNotNull(inventory.getReservationId());
-        assertNotNull(inventory.getReservedAt());
-    }
-
-    @Test
-    void rejectReservationWhenPetAlreadyReserved() {
-        UUID petId = UUID.randomUUID();
+    private PetInventory pet(UUID petId, InventoryStatus status, Long orderId) {
         PetInventory inventory = new PetInventory(petId);
-        inventory.setStatus(InventoryStatus.RESERVED);
-        when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
+        inventory.setStatus(status);
+        inventory.setOrderId(orderId);
+        ReflectionTestUtils.setField(inventory, "id", UUID.randomUUID());
+        return inventory;
+    }
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> inventoryService.reservePet(petId, UUID.randomUUID()));
+    private OrderCreatedEvent orderCreated(UUID eventId, List<UUID> petIds) {
+        return new OrderCreatedEvent(eventId, "OrderCreatedEvent", 1, UUID.randomUUID(), Instant.now(), UUID.randomUUID(),
+                ORDER_ID, 101L, petIds, BigDecimal.TEN);
+    }
 
-        assertTrue(ex.getMessage().contains("not available"));
+    /** Event types written to the outbox, in order. */
+    private List<String> publishedEventTypes() {
+        ArgumentCaptor<InventoryOutboxEvent> captor = ArgumentCaptor.forClass(InventoryOutboxEvent.class);
+        verify(inventoryOutboxRepository, atLeastOnce()).save(captor.capture());
+        return captor.getAllValues().stream().map(InventoryOutboxEvent::getEventType).toList();
     }
 
     @Test
-    void handleOrderCreatedEventReservesAvailablePets() {
-        UUID petId = UUID.randomUUID();
-        PetInventory inventory = new PetInventory(petId);
-        when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
-        when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void orderCreatedReservesEveryAvailablePet() {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        PetInventory a = pet(first, InventoryStatus.AVAILABLE, null);
+        PetInventory b = pet(second, InventoryStatus.AVAILABLE, null);
+        when(petInventoryRepository.findByPetId(first)).thenReturn(Optional.of(a));
+        when(petInventoryRepository.findByPetId(second)).thenReturn(Optional.of(b));
 
-        OrderCreatedEvent event = new OrderCreatedEvent(
-                UUID.randomUUID(),
-                "OrderCreatedEvent",
-                1,
-                UUID.randomUUID(),
-                Instant.now(),
-                UUID.randomUUID(),
-                42L,
-                101L,
-                List.of(petId),
-                null
-        );
+        inventoryService.handleOrderCreatedEvent(orderCreated(UUID.randomUUID(), List.of(first, second)));
 
-        assertDoesNotThrow(() -> inventoryService.handleOrderCreatedEvent(event));
-        assertEquals(InventoryStatus.RESERVED, inventory.getStatus());
-        verify(petInventoryRepository, atLeastOnce()).save(any(PetInventory.class));
+        for (PetInventory inventory : List.of(a, b)) {
+            assertEquals(InventoryStatus.RESERVED, inventory.getStatus());
+            assertEquals(ORDER_ID, inventory.getOrderId());
+            assertNotNull(inventory.getReservationExpiresAt());
+        }
+        assertEquals(a.getReservationId(), b.getReservationId(), "one reservation per order");
+        assertTrue(publishedEventTypes().contains("PetReservedEvent"));
     }
 
     @Test
-    void duplicateOrderCreatedEventIsIgnoredSafely() {
-        UUID petId = UUID.randomUUID();
+    void duplicateOrderCreatedEventIsIgnored() {
         UUID eventId = UUID.randomUUID();
-        PetInventory inventory = new PetInventory(petId);
-        when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
-        when(processedEventRepository.markProcessed(eventId)).thenReturn(1, 0);
-        when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(processedEventRepository.markProcessed(eventId)).thenReturn(0);
 
-        OrderCreatedEvent event = new OrderCreatedEvent(
-                eventId,
-                "OrderCreatedEvent",
-                1,
-                UUID.randomUUID(),
-                Instant.now(),
-                UUID.randomUUID(),
-                99L,
-                101L,
-                List.of(petId),
-                null
-        );
+        inventoryService.handleOrderCreatedEvent(orderCreated(eventId, List.of(UUID.randomUUID())));
 
-        inventoryService.handleOrderCreatedEvent(event);
-        inventoryService.handleOrderCreatedEvent(event);
-
-        assertEquals(InventoryStatus.RESERVED, inventory.getStatus());
-        verify(petInventoryRepository, times(1)).save(any(PetInventory.class));
+        verify(petInventoryRepository, never()).save(any());
+        verify(inventoryOutboxRepository, never()).save(any());
     }
 
     @Test
-    void reservePetFailsWhenOptimisticLockConflictOccurs() {
-        UUID petId = UUID.randomUUID();
-        PetInventory inventory = new PetInventory(petId);
-        when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
-        when(petInventoryRepository.save(any(PetInventory.class)))
-                .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("conflict"));
+    void unknownPetFailsWithPetNotFoundInsteadOfBeingCreated() {
+        UUID unknown = UUID.randomUUID();
+        when(petInventoryRepository.findByPetId(unknown)).thenReturn(Optional.empty());
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> inventoryService.reservePet(petId, UUID.randomUUID()));
+        inventoryService.handleOrderCreatedEvent(orderCreated(UUID.randomUUID(), List.of(unknown)));
 
-        assertTrue(ex.getMessage().contains("already reserved"));
+        verify(petInventoryRepository, never()).save(any());
+        ArgumentCaptor<InventoryOutboxEvent> captor = ArgumentCaptor.forClass(InventoryOutboxEvent.class);
+        verify(inventoryOutboxRepository).save(captor.capture());
+        assertEquals("PetReservationFailedEvent", captor.getValue().getEventType());
+        assertTrue(captor.getValue().getPayload().contains("PET_NOT_FOUND"));
     }
 
     @Test
-    void handleOrderConfirmedEventMarksPetsSold() {
-        UUID petId = UUID.randomUUID();
-        PetInventory inventory = new PetInventory(petId);
-        inventory.setStatus(InventoryStatus.RESERVED);
-        when(processedEventRepository.markProcessed(any(UUID.class))).thenReturn(1);
-        when(petInventoryRepository.findByPetId(petId)).thenReturn(Optional.of(inventory));
-        when(petInventoryRepository.save(any(PetInventory.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void reservationIsAllOrNothingWhenOnePetIsTaken() {
+        UUID free = UUID.randomUUID();
+        UUID taken = UUID.randomUUID();
+        PetInventory freePet = pet(free, InventoryStatus.AVAILABLE, null);
+        when(petInventoryRepository.findByPetId(free)).thenReturn(Optional.of(freePet));
+        when(petInventoryRepository.findByPetId(taken)).thenReturn(Optional.of(pet(taken, InventoryStatus.RESERVED, 99L)));
 
-        OrderConfirmedEvent event = new OrderConfirmedEvent(
-                UUID.randomUUID(),
-                "OrderConfirmedEvent",
-                1,
-                UUID.randomUUID(),
-                Instant.now(),
-                UUID.randomUUID(),
-                77L,
-                101L,
-                List.of(petId),
-                BigDecimal.valueOf(50000)
-        );
+        inventoryService.handleOrderCreatedEvent(orderCreated(UUID.randomUUID(), List.of(free, taken)));
 
-        assertDoesNotThrow(() -> inventoryService.handleOrderConfirmedEvent(event));
-        assertEquals(InventoryStatus.SOLD, inventory.getStatus());
+        assertEquals(InventoryStatus.AVAILABLE, freePet.getStatus());
+        assertEquals(List.of("PetReservationFailedEvent"), publishedEventTypes());
+    }
+
+    @Test
+    void paymentSucceededSellsPetsStillReservedForTheOrder() {
+        PetInventory reserved = pet(UUID.randomUUID(), InventoryStatus.RESERVED, ORDER_ID);
+        when(petInventoryRepository.findByOrderId(ORDER_ID)).thenReturn(List.of(reserved));
+
+        inventoryService.handlePaymentSucceededEvent(paymentSucceeded());
+
+        assertEquals(InventoryStatus.SOLD, reserved.getStatus());
+        assertNotNull(reserved.getSoldAt());
+        assertTrue(publishedEventTypes().contains("PetsSoldEvent"));
+    }
+
+    @Test
+    void paymentSucceededAfterReservationWasLostReportsSaleConflictAndSellsNothing() {
+        when(petInventoryRepository.findByOrderId(ORDER_ID)).thenReturn(List.of());
+
+        inventoryService.handlePaymentSucceededEvent(paymentSucceeded());
+
+        verify(petInventoryRepository, never()).save(any());
+        assertEquals(List.of("InventorySaleConflictEvent"), publishedEventTypes());
+    }
+
+    @Test
+    void orderFailedReleasesOnlyPetsStillReservedForTheOrder() {
+        PetInventory reserved = pet(UUID.randomUUID(), InventoryStatus.RESERVED, ORDER_ID);
+        PetInventory alreadySold = pet(UUID.randomUUID(), InventoryStatus.SOLD, ORDER_ID);
+        when(petInventoryRepository.findByOrderId(ORDER_ID)).thenReturn(List.of(reserved, alreadySold));
+
+        inventoryService.handleOrderFailedEvent(new OrderFailedEvent(UUID.randomUUID(), "OrderFailedEvent", 1,
+                UUID.randomUUID(), Instant.now(), UUID.randomUUID(), ORDER_ID, 101L, List.of(), "PAYMENT_FAILED:PAYMENT_DECLINED"));
+
+        assertEquals(InventoryStatus.AVAILABLE, reserved.getStatus());
+        assertNull(reserved.getOrderId());
+        assertEquals(InventoryStatus.SOLD, alreadySold.getStatus());
+    }
+
+    @Test
+    void archivedAvailablePetIsRetiredButReservedPetIsNot() {
+        UUID availableId = UUID.randomUUID();
+        UUID reservedId = UUID.randomUUID();
+        PetInventory available = pet(availableId, InventoryStatus.AVAILABLE, null);
+        PetInventory reserved = pet(reservedId, InventoryStatus.RESERVED, ORDER_ID);
+        when(petInventoryRepository.findByPetId(availableId)).thenReturn(Optional.of(available));
+        when(petInventoryRepository.findByPetId(reservedId)).thenReturn(Optional.of(reserved));
+
+        inventoryService.handlePetCatalogEvent(archived(availableId));
+        inventoryService.handlePetCatalogEvent(archived(reservedId));
+
+        assertEquals(InventoryStatus.RETIRED, available.getStatus());
+        assertEquals(InventoryStatus.RESERVED, reserved.getStatus());
+    }
+
+    private PaymentSucceededEvent paymentSucceeded() {
+        return new PaymentSucceededEvent(UUID.randomUUID(), "PaymentSucceededEvent", 1, UUID.randomUUID(), Instant.now(),
+                UUID.randomUUID(), ORDER_ID, UUID.randomUUID(), BigDecimal.TEN);
+    }
+
+    private PetCatalogEvent archived(UUID petId) {
+        return new PetCatalogEvent(UUID.randomUUID(), "PetArchivedEvent", 1, petId, "RETIRED", Instant.now());
     }
 }

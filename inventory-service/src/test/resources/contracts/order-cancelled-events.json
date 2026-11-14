@@ -1,0 +1,1 @@
+{"eventId":"30b349bc-1d68-4194-b146-e6975edbcdb8","eventType":"OrderCancelledEvent","eventVersion":1,"aggregateId":"6bac9052-adfa-4f6f-b364-d7e67648d8c2","timestamp":"2026-11-14T08:25:43.391073675Z","correlationId":"c28e02ea-d7cb-4cdc-99b1-9bd95093041b","orderId":10,"customerId":2,"petIds":["6c65d607-7100-4341-86ec-a750db375ea3"],"reason":"RESERVATION_EXPIRED"}
