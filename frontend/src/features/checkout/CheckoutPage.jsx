@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Alert,
   Box,
@@ -13,39 +13,16 @@ import {
   Typography,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth';
 import { useCart } from '../cart';
-import { createOrder, extractApiError, getCurrentUser } from '../../api';
-
-const getCurrencyLabel = (value) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(Number(value || 0));
+import { createOrder, extractApiError } from '../../api';
+import { formatCurrency } from '../../components/format';
+import SimulatedPaymentNote from '../../components/SimulatedPaymentNote';
 
 function CheckoutPage() {
   const navigate = useNavigate();
-  const { token } = useAuth();
   const { cartItems, subtotal, clearCart } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [orderResult, setOrderResult] = useState(null);
-
-  useEffect(() => {
-    if (!token) {
-      return;
-    }
-
-    const loadCurrentUser = async () => {
-      try {
-        await getCurrentUser(token);
-      } catch (apiError) {
-        setError(extractApiError(apiError));
-      }
-    };
-
-    loadCurrentUser();
-  }, [token]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -66,9 +43,10 @@ function CheckoutPage() {
         })),
       };
 
-      const response = await createOrder(payload, token);
-      setOrderResult(response);
+      const order = await createOrder(payload);
       clearCart();
+      // The order page polls the saga until the order is confirmed, cancelled or failed (R-FE-03).
+      navigate(`/orders/${order.id}`, { state: { justPlaced: true } });
     } catch (apiError) {
       setError(extractApiError(apiError));
     } finally {
@@ -76,7 +54,7 @@ function CheckoutPage() {
     }
   };
 
-  if (!cartItems.length && !orderResult) {
+  if (!cartItems.length) {
     return (
       <Container maxWidth="md" sx={{ py: 8 }}>
         <Card>
@@ -93,39 +71,6 @@ function CheckoutPage() {
     );
   }
 
-  if (orderResult) {
-    return (
-      <Container maxWidth="md" sx={{ py: 8 }}>
-        <Card>
-          <CardContent sx={{ p: 4 }}>
-            <Typography variant="overline" color="success.main" sx={{ fontWeight: 700, letterSpacing: '0.16em' }}>
-              Order created &amp; saga started
-            </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.05em', mb: 2 }}>
-              Thanks for your purchase
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Your order was created and published to the event-driven reservation, payment, and shipping pipeline.
-            </Typography>
-            <Stack spacing={1}>
-              <Typography><strong>Order ID:</strong> {orderResult.id}</Typography>
-              <Typography><strong>Initial Status:</strong> {orderResult.status}</Typography>
-              <Typography><strong>Total:</strong> {getCurrencyLabel(orderResult.totalAmount)}</Typography>
-            </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 3 }}>
-              <Button variant="contained" onClick={() => navigate('/orders')}>
-                View Order &amp; Tracking
-              </Button>
-              <Button variant="outlined" onClick={() => navigate('/pets')}>
-                Continue shopping
-              </Button>
-            </Stack>
-          </CardContent>
-        </Card>
-      </Container>
-    );
-  }
-
   return (
     <Container maxWidth="lg" sx={{ py: 8 }}>
       <Grid container spacing={4}>
@@ -138,6 +83,11 @@ function CheckoutPage() {
 
               <Box component="form" onSubmit={handleSubmit} noValidate>
                 <Stack spacing={3}>
+                  <Typography variant="body1" color="text.secondary">
+                    Submitting starts the checkout saga: your pets are reserved, paid for and handed to shipping.
+                    You can follow every step on the order page.
+                  </Typography>
+                  <SimulatedPaymentNote />
                   {error && <Alert severity="error">{error}</Alert>}
 
                   <Button type="submit" variant="contained" size="large" disabled={isSubmitting}>
@@ -167,14 +117,14 @@ function CheckoutPage() {
                   <Box key={item.id}>
                     <Stack direction="row" justifyContent="space-between" spacing={2}>
                       <Typography>{item.name}</Typography>
-                      <Typography sx={{ fontWeight: 700 }}>{getCurrencyLabel(item.price)}</Typography>
+                      <Typography sx={{ fontWeight: 700 }}>{formatCurrency(item.price)}</Typography>
                     </Stack>
                   </Box>
                 ))}
                 <Divider />
                 <Box display="flex" justifyContent="space-between">
                   <Typography variant="h6" sx={{ fontWeight: 700 }}>Total</Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{getCurrencyLabel(subtotal)}</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{formatCurrency(subtotal)}</Typography>
                 </Box>
               </Stack>
             </CardContent>

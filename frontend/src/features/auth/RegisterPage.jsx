@@ -43,16 +43,7 @@ function RegisterPage() {
     try {
       const authResponse = await registerUser(form);
       if (authResponse?.token) {
-        login({
-          token: authResponse.token,
-          tokenType: authResponse.tokenType,
-          role: authResponse.role,
-          email: authResponse.email,
-          user: {
-            email: authResponse.email,
-            role: authResponse.role,
-          },
-        });
+        login(authResponse);
         navigate('/');
       } else {
         navigate('/login');
