@@ -56,7 +56,12 @@ class KafkaPlatformIntegrationTest {
 
     @Container
     @ServiceConnection
-    static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.0.1");
+    static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.0.1")
+            // Testcontainers 1.21 starts the broker with `while [ ! -f script ]; ...; script`, which can run the
+            // starter script before Docker has finished copying it (exit code 126 on a busy Docker VM). Wait until the
+            // script is executable and non-empty instead.
+            .withCommand("sh", "-c", "while [ ! -x /tmp/testcontainers_start.sh ] || [ ! -s /tmp/testcontainers_start.sh ];"
+                    + " do sleep 0.1; done; sleep 0.2; /tmp/testcontainers_start.sh");
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;

@@ -10,9 +10,12 @@
 #   3. payment declined      -> order FAILED, payment FAILED, pet AVAILABLE again
 #   4. cancel during charge  -> order CANCELLED, payment REFUNDED, pet AVAILABLE again
 #   5. reservation expiry    -> order CANCELLED, payment REFUNDED, pet AVAILABLE again
+#   6. stuck order           -> tracking escalates an order still PAYMENT_PENDING, and clears it once confirmed
+#   R. reservation race      -> two customers order the same pet at once: one CONFIRMED, the other FAILED
+#                               (PetReservationFailed) with an accurate notification (Phase 6)
 #   S. security (Phase 3)    -> each service rejects another customer's records (403), owner/admin allowed,
 #                               shared error body, coarse gateway rules (401 without token, admin-only prefixes)
-# Scenarios 3-5 restart payment/inventory with test settings; defaults are restored at the end.
+# Scenarios 3-6 restart payment/inventory/fulfillment with test settings; defaults are restored at the end.
 # Each scenario creates its own fresh pet (as admin), so the seeded catalog is not used up.
 set -euo pipefail
 
@@ -87,8 +90,8 @@ restart_with() { # restart_with "VAR=value ..." services...
 }
 
 restore_defaults() {
-  log "Restoring default payment/inventory settings"
-  restart_with "" payment-service inventory-service
+  log "Restoring default payment/inventory/fulfillment settings"
+  restart_with "" payment-service inventory-service fulfillment-service
 }
 trap restore_defaults EXIT
 
@@ -161,6 +164,22 @@ check "user advances a delivery (HTTP)" "$(advance_delivery "$USER_TOKEN" "$ORDE
 check "unknown order payment (HTTP)" "$(http_code -H "Authorization: Bearer $ADMIN" "$GATEWAY/api/v1/payments/order/999999999")" 404
 check "own profile from token (HTTP)" "$(http_code -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/users/me")" 200
 
+log "R. Two customers race for the same pet"
+PET=$(create_pet "$ADMIN")
+# Both requests leave before the catalog learns the pet is reserved, so both orders are accepted and inventory decides.
+order_pet "$USER_TOKEN" "$PET" > "${TMPDIR:-/tmp}/smoke-race-a" &
+order_pet "$OTHER_TOKEN" "$PET" > "${TMPDIR:-/tmp}/smoke-race-b" &
+wait
+RACE_A=$(cat "${TMPDIR:-/tmp}/smoke-race-a"); RACE_B=$(cat "${TMPDIR:-/tmp}/smoke-race-b")
+race_outcome() { printf '%s\n%s\n' "$(order_status "$USER_TOKEN" "$RACE_A")" "$(order_status "$OTHER_TOKEN" "$RACE_B")" | sort | tr '\n' ' ' | sed 's/ $//'; }
+wait_for "race outcome (orders #$RACE_A, #$RACE_B)" 40 "CONFIRMED FAILED" race_outcome
+if [ "$(order_status "$USER_TOKEN" "$RACE_A")" = FAILED ]; then LOSER=$RACE_A; LOSER_TOKEN=$USER_TOKEN; else LOSER=$RACE_B; LOSER_TOKEN=$OTHER_TOKEN; fi
+wait_for "loser told the pet is gone" 20 True api_json "$LOSER_TOKEN" "notifications/order/$LOSER" \
+  "any(n['type']=='ORDER_FAILED' and 'no longer available' in n['message'] for n in d)"
+wait_for "loser's tracking shows the reservation failure" 20 True tracking "$LOSER_TOKEN" "$LOSER" \
+  "any(e['eventType']=='PetReservationFailed' for e in d['timeline'])"
+check "loser was never charged (no payment, HTTP)" "$(http_code -H "Authorization: Bearer $LOSER_TOKEN" "$GATEWAY/api/v1/payments/order/$LOSER")" 404
+
 log "2. Archive rules"
 PET=$(create_pet "$ADMIN")
 check "archive available pet (HTTP)" "$(http_code -X DELETE -H "Authorization: Bearer $ADMIN" "$GATEWAY/api/v1/pets/$PET")" 204
@@ -205,6 +224,19 @@ wait_for "payment refunded after the slow charge" 40 REFUNDED payment_status "$U
 wait_for "pet released" 15 AVAILABLE pet_status "$PET"
 wait_for "tracking" 20 "CANCELLED REFUNDED" tracking "$USER_TOKEN" "$ORDER" "d['summary']['orderStatus'] + ' ' + d['summary']['paymentStatus']"
 check "expiry wording" "$(api_json "$USER_TOKEN" "notifications/order/$ORDER" "str(any('in time' in n['message'] for n in d if n['type']=='ORDER_CANCELLED'))")" True
+
+log "6. Order stuck before confirmation is escalated, then cleared"
+restart_with "FULFILLMENT_STUCK_AFTER=PT10S FULFILLMENT_ESCALATION_CHECK_MS=2000" fulfillment-service
+restart_with "PAYMENT_SIMULATION_DELAY=PT35S" payment-service
+restart_with "" inventory-service
+PET=$(create_pet "$ADMIN")
+ORDER=$(order_pet "$USER_TOKEN" "$PET")
+wait_for "order #$ORDER waiting for payment" 15 PAYMENT_PENDING order_status "$USER_TOKEN" "$ORDER"
+wait_for "tracking escalates the stuck order" 30 "True STUCK_BEFORE_CONFIRMATION" tracking "$USER_TOKEN" "$ORDER" \
+  "str(d['summary']['escalated']) + ' ' + str(d['summary']['escalationReason'])"
+wait_for "order confirmed after the slow charge" 45 CONFIRMED order_status "$USER_TOKEN" "$ORDER"
+wait_for "escalation cleared once confirmed" 20 "False None" tracking "$USER_TOKEN" "$ORDER" \
+  "str(d['summary']['escalated']) + ' ' + str(d['summary']['escalationReason'])"
 
 log "Result: $PASSED passed, $FAILED failed"
 [ "$FAILED" -eq 0 ]

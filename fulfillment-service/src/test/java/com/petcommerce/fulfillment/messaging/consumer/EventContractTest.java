@@ -12,6 +12,7 @@ import com.petcommerce.fulfillment.messaging.event.OrderFailedEvent;
 import com.petcommerce.fulfillment.messaging.event.PaymentFailedEvent;
 import com.petcommerce.fulfillment.messaging.event.PaymentRefundedEvent;
 import com.petcommerce.fulfillment.messaging.event.PaymentSucceededEvent;
+import com.petcommerce.fulfillment.messaging.event.PetReservationFailedEvent;
 import com.petcommerce.fulfillment.messaging.event.PetReservedEvent;
 import com.petcommerce.fulfillment.messaging.event.ShipmentCreatedEvent;
 import org.junit.jupiter.api.Test;
@@ -101,6 +102,13 @@ class EventContractTest {
     @Test
     void deliveryEventCarriesTheNote() throws Exception {
         assertNotNull(read("delivery-status-updated-events", DeliveryStatusUpdatedEvent.class).note(), "note");
+    }
+
+    @Test
+    void consumesPetReservationFailed() throws Exception {
+        PetReservationFailedEvent e = read("pet-reservation-failed-events", PetReservationFailedEvent.class);
+        requireEnvelope(e.eventId(), e.orderId(), e.timestamp());
+        assertNotNull(e.reason(), "reason");
     }
 
     private static void requireEnvelope(Object eventId, Object orderId, Object timestamp) {

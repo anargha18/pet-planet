@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.petcommerce.order.messaging.event.InventorySaleConflictEvent;
+import com.petcommerce.order.messaging.event.PetReservationFailedEvent;
 import com.petcommerce.order.messaging.event.PetReservedEvent;
 import com.petcommerce.order.messaging.event.PetsSoldEvent;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,16 @@ class EventContractTest {
         assertNotNull(event.eventId(), "eventId");
         assertNotNull(event.orderId(), "orderId");
         assertNotNull(event.reason(), "reason");
+    }
+
+    @Test
+    void consumesPetReservationFailedAsProduced() throws Exception {
+        PetReservationFailedEvent event = read("pet-reservation-failed-events", PetReservationFailedEvent.class);
+
+        assertNotNull(event.eventId(), "eventId");
+        assertNotNull(event.orderId(), "orderId");
+        assertNotNull(event.reason(), "reason");
+        assertNotNull(event.correlationId(), "correlationId");
     }
 
     private static <T> T read(String topic, Class<T> type) throws Exception {
