@@ -1,20 +1,19 @@
-// Order tracking lookups (payment, shipment, notification).
-import { getAuthHeaders, orderApi } from './client';
+// Order tracking. The fulfillment projection is the one tracking view (summary + timeline); payment and notifications
+// are read from their owning services for details.
+import { http } from './client';
 
-export const getPaymentByOrderId = async (orderId, token) => {
-  const response = await orderApi.get(`/api/v1/payments/order/${orderId}`, getAuthHeaders(token));
-  return response.data;
-};
+/** { summary, timeline[] } for one order; 404 until the projection has seen the order. */
+export const getOrderTracking = async (orderId) => (await http.get(`/api/v1/fulfillment/orders/${orderId}`)).data;
 
-export const getShipmentByOrderId = async (orderId, token) => {
-  const response = await orderApi.get(`/api/v1/shipments/order/${orderId}`, getAuthHeaders(token));
-  return response.data;
-};
+/** Page of the caller's tracking summaries. */
+export const getMyTracking = async (params = {}) =>
+  (await http.get('/api/v1/fulfillment/orders/me', { params: { size: 100, ...params } })).data;
 
-// The API returns every notification of the order (oldest first, Phase 4); the current page shows the latest one.
-// Phase 5 replaces these lookups with the fulfillment tracking view and its timeline.
-export const getNotificationByOrderId = async (orderId, token) => {
-  const response = await orderApi.get(`/api/v1/notifications/order/${orderId}`, getAuthHeaders(token));
-  const notifications = Array.isArray(response.data) ? response.data : [];
-  return notifications.length > 0 ? notifications[notifications.length - 1] : null;
-};
+/** Admin: page of all tracking summaries, optional customerId / escalated filters. */
+export const searchTracking = async (params = {}) => (await http.get('/api/v1/fulfillment/orders', { params })).data;
+
+export const getPaymentByOrderId = async (orderId) => (await http.get(`/api/v1/payments/order/${orderId}`)).data;
+
+/** All notifications of an order, oldest first ([] if none yet). */
+export const getNotificationsForOrder = async (orderId) =>
+  (await http.get(`/api/v1/notifications/order/${orderId}`)).data;

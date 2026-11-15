@@ -11,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { extractApiError, loginUser } from '../../api';
 
@@ -19,7 +19,12 @@ const initialState = { email: '', password: '' };
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useAuth();
+  const expired = searchParams.get('expired') === '1';
+  // Only same-app paths are followed after login (never an absolute URL from the query string).
+  const requestedNext = searchParams.get('next') || '/';
+  const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/';
   const [form, setForm] = useState(initialState);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,17 +41,8 @@ function LoginPage() {
 
     try {
       const authResponse = await loginUser(form);
-      login({
-        token: authResponse.token,
-        tokenType: authResponse.tokenType,
-        role: authResponse.role,
-        email: authResponse.email,
-        user: {
-          email: authResponse.email,
-          role: authResponse.role,
-        },
-      });
-      navigate('/');
+      login(authResponse);
+      navigate(next, { replace: true });
     } catch (apiError) {
       setError(extractApiError(apiError));
     } finally {
@@ -68,6 +64,12 @@ function LoginPage() {
               </Typography>
             </Box>
 
+            {expired && !error && (
+              <Alert severity="warning">Your session has expired. Please sign in again.</Alert>
+            )}
+            {!expired && requestedNext !== '/' && !error && (
+              <Alert severity="info">Please sign in to continue.</Alert>
+            )}
             {error && <Alert severity="error">{error}</Alert>}
 
             <Box component="form" onSubmit={handleSubmit} noValidate>

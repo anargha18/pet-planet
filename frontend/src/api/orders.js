@@ -1,20 +1,10 @@
-// Orders.
-import { getAuthHeaders, orderApi } from './client';
+// Orders. Users only ever see their own; admins may filter by customerId and status.
+import { http } from './client';
 
-export const createOrder = async (payload, token) => {
-  const response = await orderApi.post('/api/v1/orders', payload, getAuthHeaders(token));
-  return response.data;
-};
+export const createOrder = async (payload) => (await http.post('/api/v1/orders', payload)).data;
 
-export const getOrders = async (token, params = {}) => {
-  const response = await orderApi.get('/api/v1/orders', {
-    ...getAuthHeaders(token),
-    params,
-  });
-  return response.data;
-};
+export const getOrder = async (orderId) => (await http.get(`/api/v1/orders/${orderId}`)).data;
 
-export const cancelOrder = async (orderId, token) => {
-  const response = await orderApi.patch(`/api/v1/orders/${orderId}/cancel`, {}, getAuthHeaders(token));
-  return response.data;
-};
+export const getOrders = async (params = {}) => (await http.get('/api/v1/orders', { params })).data;
+
+export const cancelOrder = async (orderId) => (await http.patch(`/api/v1/orders/${orderId}/cancel`, {})).data;
