@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.petcommerce.shipping.application.ShippingService;
 import com.petcommerce.shipping.domain.model.Shipment;
 import com.petcommerce.shipping.domain.model.ShipmentStatus;
+import com.petcommerce.shipping.messaging.event.DeliveryStatusUpdatedEvent;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.shipping.messaging.publisher.ShipmentEventPublisher;
 import com.petcommerce.shipping.persistence.repository.ProcessedEventRepository;
@@ -81,7 +82,8 @@ class ShippingServiceTest {
 
         assertNotNull(shipment);
         assertEquals(orderId, shipment.getOrderId());
-        assertEquals(ShipmentStatus.SHIPPED, shipment.getStatus());
+        assertEquals(ShipmentStatus.CREATED, shipment.getStatus());
+        assertNull(shipment.getShippedAt());
         assertNotNull(shipment.getTrackingNumber());
         verify(shipmentRepository, atLeastOnce()).save(any(Shipment.class));
     }
@@ -108,5 +110,47 @@ class ShippingServiceTest {
         Shipment shipment = shippingService.handleOrderConfirmedEvent(event);
 
         assertNull(shipment);
+    }
+
+    @Test
+    void deliveryProgressIsMirroredOntoTheShipment() {
+        Shipment shipment = new Shipment(50L, 7L, "PET-50-X");
+        when(shipmentRepository.findByOrderId(50L)).thenReturn(Optional.of(shipment));
+
+        shippingService.handleDeliveryStatusUpdatedEvent(deliveryEvent(50L, "IN_TRANSIT"));
+        assertEquals(ShipmentStatus.SHIPPED, shipment.getStatus());
+        assertNotNull(shipment.getShippedAt());
+
+        shippingService.handleDeliveryStatusUpdatedEvent(deliveryEvent(50L, "OUT_FOR_DELIVERY"));
+        assertEquals(ShipmentStatus.SHIPPED, shipment.getStatus());
+
+        shippingService.handleDeliveryStatusUpdatedEvent(deliveryEvent(50L, "DELIVERED"));
+        assertEquals(ShipmentStatus.DELIVERED, shipment.getStatus());
+        assertNotNull(shipment.getDeliveredAt());
+    }
+
+    @Test
+    void terminalShipmentNeverChanges() {
+        Shipment shipment = new Shipment(51L, 7L, "PET-51-X");
+        when(shipmentRepository.findByOrderId(51L)).thenReturn(Optional.of(shipment));
+
+        shippingService.handleDeliveryStatusUpdatedEvent(deliveryEvent(51L, "DELIVERY_FAILED"));
+        shippingService.handleDeliveryStatusUpdatedEvent(deliveryEvent(51L, "DELIVERED"));
+
+        assertEquals(ShipmentStatus.DELIVERY_FAILED, shipment.getStatus());
+        assertNull(shipment.getDeliveredAt());
+    }
+
+    @Test
+    void deliveryEventForUnknownShipmentIsSkipped() {
+        when(shipmentRepository.findByOrderId(52L)).thenReturn(Optional.empty());
+
+        assertNull(shippingService.handleDeliveryStatusUpdatedEvent(deliveryEvent(52L, "DELIVERED")));
+        verify(shipmentRepository, never()).save(any(Shipment.class));
+    }
+
+    private static DeliveryStatusUpdatedEvent deliveryEvent(Long orderId, String status) {
+        return new DeliveryStatusUpdatedEvent(UUID.randomUUID(), "DeliveryStatusUpdatedEvent", 1, UUID.randomUUID(),
+                Instant.now(), UUID.randomUUID(), orderId, 7L, UUID.randomUUID(), "PET-" + orderId + "-X", status);
     }
 }

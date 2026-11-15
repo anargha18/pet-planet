@@ -131,15 +131,14 @@ class GatewaySecurityTest {
                 .expectBody().jsonPath("$.status").isEqualTo(403);
         client.post().uri("/api/v1/pets").header(HttpHeaders.AUTHORIZATION, user).exchange().expectStatus().isForbidden();
         client.get().uri("/api/v1/inventory/pets/1").header(HttpHeaders.AUTHORIZATION, user).exchange().expectStatus().isForbidden();
-        client.put().uri("/api/v1/deliveries/order/1/delivered").header(HttpHeaders.AUTHORIZATION, user).exchange().expectStatus().isForbidden();
-        client.put().uri("/api/v1/shipments/order/1/delivered").header(HttpHeaders.AUTHORIZATION, user).exchange().expectStatus().isForbidden();
+        client.put().uri("/api/v1/deliveries/order/1/status").header(HttpHeaders.AUTHORIZATION, user).exchange().expectStatus().isForbidden();
     }
 
     @Test
     void adminPassesAdminPrefixes() {
         String admin = "Bearer " + TestJwtIssuer.adminToken(1);
         client.get().uri("/api/v1/users").header(HttpHeaders.AUTHORIZATION, admin).exchange().expectStatus().isOk();
-        client.put().uri("/api/v1/deliveries/order/1/delivered").header(HttpHeaders.AUTHORIZATION, admin).exchange().expectStatus().isOk();
+        client.put().uri("/api/v1/deliveries/order/1/status").header(HttpHeaders.AUTHORIZATION, admin).exchange().expectStatus().isOk();
     }
 
     @Test

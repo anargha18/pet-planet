@@ -2,6 +2,7 @@ package com.petcommerce.delivery.api.error;
 
 import com.petcommerce.platform.web.ApiError;
 import com.petcommerce.delivery.domain.exception.DeliveryNotFoundException;
+import com.petcommerce.delivery.domain.exception.InvalidDeliveryTransitionException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -22,5 +23,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> notFound(DeliveryNotFoundException ex, HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiError.of(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(InvalidDeliveryTransitionException.class)
+    public ResponseEntity<ApiError> invalidTransition(InvalidDeliveryTransitionException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiError.of(HttpStatus.CONFLICT, ex.getMessage(), request.getRequestURI()));
     }
 }

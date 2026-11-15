@@ -3,6 +3,7 @@ package com.petcommerce.shipping.messaging.consumer;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.petcommerce.shipping.messaging.event.DeliveryStatusUpdatedEvent;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
@@ -34,6 +35,15 @@ class EventContractTest {
         assertNotNull(event.petIds(), "petIds");
         assertNotNull(event.totalAmount(), "totalAmount");
         assertNotNull(event.correlationId(), "correlationId");
+    }
+
+    @Test
+    void consumesDeliveryStatusUpdatedAsProduced() throws Exception {
+        DeliveryStatusUpdatedEvent event = read("delivery-status-updated-events", DeliveryStatusUpdatedEvent.class);
+
+        assertNotNull(event.eventId(), "eventId");
+        assertNotNull(event.orderId(), "orderId");
+        assertNotNull(event.status(), "status");
     }
 
     private static <T> T read(String topic, Class<T> type) throws Exception {

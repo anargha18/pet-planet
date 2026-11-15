@@ -3,6 +3,7 @@ package com.petcommerce.delivery.application;
 import com.petcommerce.platform.security.AuthenticatedCaller;
 import com.petcommerce.delivery.domain.exception.DeliveryNotFoundException;
 import com.petcommerce.delivery.domain.model.DeliveryRecord;
+import com.petcommerce.delivery.persistence.repository.DeliveryEventRepository;
 import com.petcommerce.delivery.persistence.repository.DeliveryRecordRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,9 @@ class DeliveryTrackingServiceOwnershipTest {
 
     @Mock
     private DeliveryRecordRepository deliveryRecordRepository;
+
+    @Mock
+    private DeliveryEventRepository deliveryEventRepository;
 
     @InjectMocks
     private DeliveryTrackingService service;

@@ -74,8 +74,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/users", "/api/v1/users/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/pets", "/api/v1/pets/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/inventory", "/api/v1/inventory/**").hasRole("ADMIN")
-                        .pathMatchers(HttpMethod.PUT, "/api/v1/shipments/order/*/delivered",
-                                "/api/v1/deliveries/order/*/delivered").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.PUT, "/api/v1/deliveries/order/*/status").hasRole("ADMIN")
                         .pathMatchers("/api/v1/**").hasAnyRole("USER", "ADMIN")
                         .anyExchange().denyAll())
                 .build();
