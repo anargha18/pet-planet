@@ -1,20 +1,18 @@
-# Known issues (open as of 2026-11-14, Phase 3 done)
+# Known issues (open as of 2026-11-15, Phase 4 done)
 
-IDs refer to `docs/restructuring/01-audit-findings.md`. Fixed so far: F1, F2, F3, F4 (via one-time reset), F5, F6, S1, S2, S3, S4, S5, S6, S7, S8, S14, U1 (backend side), A1–A5 (Phase 3, verified by tests + `make smoke` 49/49). Remove an entry only after the fix is verified.
+IDs refer to `docs/restructuring/01-audit-findings.md`. Fixed so far: F1, F2, F3, F4 (via one-time reset), F5, F6, S1, S2, S3, S4, S5, S6, S7, S8, S14, U1 (backend side), A1–A5 (Phase 3, verified by tests + `make smoke` 49/49), S9–S12 (Phase 4, verified by tests + `make smoke` 74/74). Remove an entry only after the fix is verified.
 
 ## Open — planned phase
 
 | Issue | Phase |
 |---|---|
-| S9 Two "delivered" endpoints (shipping's emits no event; delivery's doesn't update shipment) | 4 |
-| S10 shipping/delivery/fulfillment store overlapping state; fulfillment not yet a tracking projection | 4 |
-| S11 Topics with no consumer: `notification-sent`, `fulfillment-updated`, `pet-reservation-released`, `payment-refunded` | 4 |
-| S12 Notification: one per order, says "on the way" at confirmation; no notice for cancel/fail/refund/delivery | 4 |
 | U2 No admin UI; U3 no 401/expired-token handling or protected routes; U4 tracking page swallows errors, no polling; U5 duplicate axios instances | 5 |
 | R-EVT-02 full envelope (`causationId`, `producer`, `aggregateId`=order) not implemented; `aggregateId` often random | later |
 | R-EVT-08: HTTP correlation ID is in the MDC/error bodies, but order-service does not reuse it as the saga `correlationId` | later |
-| R-TEST-01 per-service Testcontainers (Kafka+Postgres) tests not written; contract fixtures missing for `payment-failed`, `pet-reservation-failed/expired`, `pet-catalog-events` | 6 |
-| Smoke test has no admin "mark delivered" step | 4 |
+| R-TEST-01 per-service Testcontainers (Kafka+Postgres) tests not written; contract fixtures missing for `pet-reservation-failed` (never produced locally), `pet-reservation-expired`, `pet-catalog-events` | 6 |
+| Fulfillment stuck-order escalation verified by unit test only (not observed live) | 6 |
+| Retired topics `fulfillment-updated-events`, `pet-reservation-released-events` still exist in Kafka with old messages | accepted |
+| Frontend still uses per-service lookups (shows latest notification only); fulfillment tracking view not used yet | 5 |
 | Old dev RSA key pair still in git history (removed from tree; rotate local `.env` with `generate-dev-keys.sh --force`) | accepted |
 | Payments created before payment `V4` have `customer_id` NULL → admin-only | accepted |
 | README saga step 4 still says `PAID` (stale since Phase 2) | 6 |
@@ -32,3 +30,7 @@ IDs refer to `docs/restructuring/01-audit-findings.md`. Fixed so far: F1, F2, F3
 - Docker Desktop has ~4 GB; full stack ~3.1 GB. 6 GB recommended.
 - Maven Central downloads can be slow/drop; Dockerfiles use a shared BuildKit cache (`id=pet-planet-m2`).
 - Helper scripts used during restructuring lived in the session scratchpad and are **not** in the repo (they are not needed to continue).
+- Spring needs `@Autowired` on one constructor when a bean has two (fulfillment `EscalationService` failed to start; unit tests did not catch it — only `make up` did).
+- Postgres superuser in compose is `petplanet_admin` (not `postgres`): `docker exec pet-planet-postgres psql -U petplanet_admin -d <db>`.
+- Fulfillment `shipment-created-events.DLT` holds the Phase 1 poison message (`{this is not json`) re-read by the new projection group: expected.
+
