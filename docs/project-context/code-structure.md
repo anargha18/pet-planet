@@ -55,10 +55,10 @@ A violation fails `./mvnw test`.
 | Path | Contains |
 |---|---|
 | `main.jsx`, `index.css` | Entry point and global styles |
-| `app/` | `App.jsx`: providers and routes; composes features |
-| `api/` | `client.js` (axios instances, `getAuthHeaders`, `extractApiError`) and one module per backend area (`auth`, `catalog`, `users`, `orders`, `tracking`), all re-exported by `api/index.js` |
-| `features/<name>/` | `auth`, `catalog`, `cart`, `checkout`, `orders`: each owns its pages, components and state, and exposes a public `index.js` |
-| `components/` | Shared, feature-agnostic UI (`Layout`) |
+| `app/` | `App.jsx` (router, providers, routes; composes features), `ProtectedRoute`, `AdminRoute` |
+| `api/` | `client.js` (the **one** axios instance with token and 401 interceptors, `extractApiError`, `isNotFound`) and one module per backend area (`auth`, `catalog`, `orders`, `tracking`, `users`, `inventory`, `deliveries`), all re-exported by `api/index.js` |
+| `features/<name>/` | `auth`, `catalog`, `cart`, `checkout`, `orders`, `profile`, `admin` (sub-folders `pets`, `inventory`, `orders`, `users`, `deliveries`): each owns its pages, components, hooks and state, and exposes a public `index.js` |
+| `components/` | Shared, feature-agnostic UI: `Layout`, `StatusChip`, `PageState` (loading/error/empty), `SimulatedPaymentNote`, `format.js` |
 | `theme/` | MUI theme |
 
 Rules (`npm run check:boundaries`, script `frontend/scripts/check-boundaries.mjs`):

@@ -48,3 +48,10 @@ Confirmed decisions only. Full context: `docs/restructuring/02-target-architectu
 - `GET /notifications/order/{id}` returns a list (`[]` when none), not 404.
 - Stuck-order escalation covers `CREATED` and `PAYMENT_PENDING` and is cleared when the order closes.
 
+## Phase 5 deviations / decisions (2026-11-15, not separately owner-confirmed)
+
+- **New `GET /api/v1/inventory/pets?status=`** (paged, admin, read-only) for the admin inventory page instead of one request per pet; `InventoryResponse` + `orderId`, `updatedAt`.
+- **Admin deliveries page uses the tracking projection** (no "all deliveries" endpoint added); orders without a shipment are filtered out client-side.
+- **API functions take no token**; the shared client injects it. `AuthProvider` sits inside `BrowserRouter` so it can redirect on 401.
+- Optional nginx production stage (R-FE-06) not built.
+

@@ -9,3 +9,4 @@
 - `pet-catalog-events`: `PetCreatedEvent` creates the inventory row; `PetArchivedEvent` retires an `AVAILABLE` pet.
 - `@Scheduled expireReservations()` (every `INVENTORY_EXPIRATION_CHECK_DELAY_MS`, default 30 s) releases reservations older than `INVENTORY_RESERVATION_TIMEOUT` (ISO-8601, default `PT5M`) and emits `PetReservationExpiredEvent`.
 - HTTP is read-only: `GET /api/v1/inventory/pets/{petId}` (admin; JWT validated by the shared platform-commons resource server). An unknown pet returns `404` (`PetInventoryNotFoundException`, shared `ApiError` body) instead of a made-up `AVAILABLE` record (changed in Phase 3). The former manual reserve/release/sold endpoints were removed (R-SAGA-07).
+- HTTP (admin only, read-only): `GET /api/v1/inventory/pets` (paged overview, optional `status`; added in Phase 5 for the admin UI) and `GET /api/v1/inventory/pets/{petId}`. Responses include `orderId` and `updatedAt`.

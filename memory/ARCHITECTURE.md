@@ -34,4 +34,4 @@ Order states: `CREATED → PAYMENT_PENDING → CONFIRMED`; `CANCELLED`, `FAILED`
 
 ## Code structure (enforced)
 
-Per service: `api` (controller/dto/mapper/error) · `application` · `domain` (model/policy/exception) · `security` · `messaging` (event/consumer/publisher) · `persistence` (entity/repository) · `client` · `config`. ArchUnit `ArchitectureTest` (11 rules) per service. Frontend: `app/`, `api/`, `features/{auth,catalog,cart,checkout,orders}` with index exports, `components/`; `npm run check:boundaries`.
+Per service: `api` (controller/dto/mapper/error) · `application` · `domain` (model/policy/exception) · `security` · `messaging` (event/consumer/publisher) · `persistence` (entity/repository) · `client` · `config`. ArchUnit `ArchitectureTest` (11 rules) per service. Frontend: `app/` (routes, `ProtectedRoute`, `AdminRoute`), `api/` (one axios client, token + 401 interceptors), `features/{auth,catalog,cart,checkout,orders,profile,admin}` with index exports, `components/` (Layout, StatusChip, PageState, format); `npm run check:boundaries`.

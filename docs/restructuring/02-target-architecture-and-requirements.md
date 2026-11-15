@@ -534,6 +534,37 @@ Not done or not verified in Phase 4:
 - The retired topics still exist in Kafka with their old messages.
 - Per-service Testcontainers tests (R-TEST-01) are still missing.
 
+**Phase 5: done (2026-11-15).**
+- R-STR-05 had already been done in Phase 0a (feature folders, `check:boundaries`), so no move was needed.
+- R-FE-01: one axios instance (`api/client.js`) with a token interceptor and a 401 interceptor. API functions no longer take tokens, and the old per-area instances were removed (U5).
+  - `AuthProvider` (now inside the router) ends the session on a 401 or when the JWT `exp` passes, then redirects to `/login?expired=1&next=…` (U3).
+- R-FE-02: `ProtectedRoute` (checkout, orders, order detail, profile) and `AdminRoute` (`/admin/**`). The nav adapts to the role.
+- R-FE-03:
+  - profile page (edit, change password);
+  - orders list with tracking from one `/fulfillment/orders/me` call;
+  - order page with the projection's timeline and all notifications, polling every 2 s (max 60 s) after checkout (U4);
+  - simulated payment stated on checkout and on open orders.
+- R-FE-04 (U2): admin pages for pets (create/edit/archive, no availability edit), inventory (read-only), orders (status/customer filters), users (create, role, deactivate/reactivate) and deliveries (advance status with an optional failure note).
+- R-FE-05: shared loading/error/empty states. No silent `catch(() => null)` remains, and a tracking 404 is shown as "not available yet".
+- R-FE-06: the dev-server container is kept. The optional nginx stage was not added.
+- Backend addition for the admin inventory page: `GET /api/v1/inventory/pets?status=` (paged, admin). `InventoryResponse` gained `orderId` and `updatedAt` (additive).
+
+Verified:
+- frontend build and boundary check;
+- inventory tests (25, including the new `InventoryControllerTest`);
+- a headless-Chrome walkthrough against the running stack: 29/29 checks, no console JavaScript errors (see [frontend.md](../project-context/frontend.md#verification));
+- `make smoke` 74/74 (2026-11-15, after the inventory change).
+
+Deviations:
+- The inventory list endpoint is new; the plan assumed the existing read API was enough.
+- The admin deliveries page lists orders from the tracking projection (50 per page) and filters client-side to those with a shipment. A large history needs paging.
+- Admin pet names on the inventory page come from up to 500 catalog pets (best effort).
+
+Not done or not verified in Phase 5:
+- No automated frontend tests are in the repository (the walkthrough script is not committed).
+- The optional production nginx stage (R-FE-06) was not added.
+- There is no favicon (404, cosmetic).
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.
