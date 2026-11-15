@@ -13,6 +13,7 @@ public final class NotificationMapper {
                 n.getId(),
                 n.getOrderId(),
                 n.getCustomerId(),
+                n.getType(),
                 n.getMessage(),
                 n.getStatus(),
                 n.getCreatedAt(),

@@ -26,6 +26,10 @@ public class Notification {
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false)
+    private NotificationType type;
+
     @Column(name = "message", nullable = false, columnDefinition = "TEXT")
     private String message;
 
@@ -42,9 +46,10 @@ public class Notification {
     protected Notification() {
     }
 
-    public Notification(Long orderId, Long customerId, String message, NotificationStatus status) {
+    public Notification(Long orderId, Long customerId, NotificationType type, String message, NotificationStatus status) {
         this.orderId = orderId;
         this.customerId = customerId;
+        this.type = type;
         this.message = message;
         this.status = status;
         this.createdAt = Instant.now();
@@ -60,6 +65,10 @@ public class Notification {
 
     public Long getCustomerId() {
         return customerId;
+    }
+
+    public NotificationType getType() {
+        return type;
     }
 
     public String getMessage() {

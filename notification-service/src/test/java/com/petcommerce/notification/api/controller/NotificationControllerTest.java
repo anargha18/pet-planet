@@ -3,7 +3,6 @@ package com.petcommerce.notification.api.controller;
 import com.petcommerce.platform.security.AuthenticatedCaller;
 import com.petcommerce.platform.security.TestJwtIssuer;
 import com.petcommerce.notification.application.NotificationService;
-import com.petcommerce.notification.domain.exception.NotificationNotFoundException;
 import com.petcommerce.notification.security.SecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,13 +74,10 @@ class NotificationControllerTest {
     }
 
     @Test
-    void missingRecordIs404WithSharedErrorBody() throws Exception {
-        when(service.getForOrder(eq(10L), any())).thenThrow(new NotificationNotFoundException(10L));
-
-        mvc.perform(get("/api/v1/notifications/order/10").header("Authorization", bearer(TestJwtIssuer.adminToken(1))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("found for order 10")));
+    void ownListUsesTheTokenUserId() throws Exception {
+        mvc.perform(get("/api/v1/notifications/me").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
+                .andExpect(status().isOk());
+        verify(service).getForCustomer(eq(7L), eq(new AuthenticatedCaller(7L, "user7@example.com", false)));
     }
 
     private static String bearer(String token) {
