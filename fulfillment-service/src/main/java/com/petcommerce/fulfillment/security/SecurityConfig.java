@@ -9,7 +9,7 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * Validates the caller's JWT with the shared platform setup (R-SEC-02) and applies this service's URL rules.
- * Read-only; ownership is checked per record in the application service.
+ * Read-only; ownership (and the admin-only search) is checked in the application service.
  */
 @Configuration
 public class SecurityConfig {

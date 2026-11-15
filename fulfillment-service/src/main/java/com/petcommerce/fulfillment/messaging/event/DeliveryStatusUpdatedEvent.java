@@ -3,17 +3,16 @@ package com.petcommerce.fulfillment.messaging.event;
 import java.time.Instant;
 import java.util.UUID;
 
+/** This service's copy of the producer's event: only the fields the tracking projection reads (unknown fields are ignored). */
 public record DeliveryStatusUpdatedEvent(
         UUID eventId,
         String eventType,
-        Integer eventVersion,
-        UUID aggregateId,
         Instant timestamp,
         UUID correlationId,
         Long orderId,
         Long customerId,
-        UUID deliveryId,
         String trackingNumber,
-        String status
+        String status,
+        String note
 ) {
 }

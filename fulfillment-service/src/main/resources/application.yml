@@ -21,14 +21,14 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
-      group-id: fulfillment-service
+      group-id: fulfillment-tracking-projection
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       # Values are plain JSON strings; platform-commons converts them to the listener's parameter type.
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      # The outbox relay sends the stored JSON string as-is (no Java type headers).
+      # Only used to publish failed records to <topic>.DLT; this projection emits no events.
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 management:
@@ -57,3 +57,9 @@ jwt:
   public-key: ${JWT_PUBLIC_KEY:}
   issuer: ${JWT_ISSUER:pet-planet}
   audience: ${JWT_AUDIENCE:pet-planet}
+
+# Tracking projection (R-SVC-01): orders still CREATED/PAYMENT_PENDING after this long are escalated.
+fulfillment:
+  escalation:
+    stuck-after: ${FULFILLMENT_STUCK_AFTER:PT10M}
+    check-interval-ms: ${FULFILLMENT_ESCALATION_CHECK_MS:60000}
