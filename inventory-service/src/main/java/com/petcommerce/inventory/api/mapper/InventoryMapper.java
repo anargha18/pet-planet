@@ -13,11 +13,13 @@ public final class InventoryMapper {
         return new InventoryResponse(
                 inventory.getPetId(),
                 inventory.getStatus().name(),
+                inventory.getOrderId(),
                 inventory.getReservationId(),
                 inventory.getReservedAt(),
                 inventory.getReservationExpiresAt(),
                 inventory.getSoldAt(),
-                inventory.getVersion()
+                inventory.getVersion(),
+                inventory.getUpdatedAt()
         );
     }
 }

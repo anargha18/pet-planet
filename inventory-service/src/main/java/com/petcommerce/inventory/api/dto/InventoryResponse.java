@@ -6,10 +6,12 @@ import java.util.UUID;
 public record InventoryResponse(
         UUID petId,
         String status,
+        Long orderId,
         UUID reservationId,
         Instant reservedAt,
         Instant reservationExpiresAt,
         Instant soldAt,
-        long version
+        long version,
+        Instant updatedAt
 ) {
 }

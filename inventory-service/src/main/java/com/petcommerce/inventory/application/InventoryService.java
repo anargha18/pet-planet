@@ -21,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -252,6 +254,12 @@ public class InventoryService {
                 log.info("Released reservation for pet {} on order {}", inventory.getPetId(), orderId);
             }
         }
+    }
+
+    /** Admin overview (read-only), optionally filtered by status. */
+    @Transactional(readOnly = true)
+    public Page<PetInventory> listInventory(InventoryStatus status, Pageable pageable) {
+        return status == null ? petInventoryRepository.findAll(pageable) : petInventoryRepository.findByStatus(status, pageable);
     }
 
     /** Current inventory state; an unknown pet is a 404 (R-SEC-06), not a made-up AVAILABLE row. */
