@@ -2,7 +2,10 @@
 # End-to-end smoke test against a RUNNING stack (`make up` first). Usage: make smoke  (or scripts/smoke-test.sh)
 #
 # Covers the checkout saga and every compensation path (R-TEST-04, part):
-#   1. happy path            -> order CONFIRMED, payment SUCCEEDED, pet SOLD, shipment created
+#   1. happy path            -> order CONFIRMED, payment SUCCEEDED, pet SOLD, shipment created; admin advances the
+#                               delivery (OUT_FOR_DELIVERY, DELIVERED) -> shipment mirrors it, typed notifications,
+#                               tracking projection shows the full timeline (Phase 4)
+#   D. delivery fails        -> shipment DELIVERY_FAILED, tracking escalated, DELIVERY_FAILED notification
 #   2. archive rules         -> archived pet RETIRED, hidden, not orderable; sold pet cannot be archived (409)
 #   3. payment declined      -> order FAILED, payment FAILED, pet AVAILABLE again
 #   4. cancel during charge  -> order CANCELLED, payment REFUNDED, pet AVAILABLE again
@@ -55,6 +58,14 @@ order_pet() { # order_pet <token> <pet id> -> order id
 order_status() { curl -sf -m 10 -H "Authorization: Bearer $1" "$GATEWAY/api/v1/orders/$2" | json "d['status']"; }
 payment_status() { curl -s -m 10 -H "Authorization: Bearer $1" "$GATEWAY/api/v1/payments/order/$2" | json "d.get('status','NONE')" 2>/dev/null || echo NONE; }
 pet_status() { curl -sf -m 10 "$GATEWAY/api/v1/pets/$1" | json "d['availabilityStatus']"; }
+# api_json <token> <path> <python expression over d>
+api_json() { curl -sf -m 10 -H "Authorization: Bearer $1" "$GATEWAY/api/v1/$2" | json "$3"; }
+tracking() { api_json "$1" "fulfillment/orders/$2" "$3"; } # tracking <token> <order> <expr>
+notification_types() { api_json "$1" "notifications/order/$2" "','.join(n['type'] for n in d)"; }
+advance_delivery() { # advance_delivery <token> <order> <status> -> HTTP code
+  curl -s -m 10 -o /dev/null -w '%{http_code}' -X PUT "$GATEWAY/api/v1/deliveries/order/$2/status" \
+    -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -d "$(printf '{"status":"%s","note":"smoke"}' "$3")"
+}
 
 # wait_for <description> <timeout seconds> <expected> <command...>
 wait_for() {
@@ -92,7 +103,35 @@ wait_for "order #$ORDER status" 30 CONFIRMED order_status "$USER_TOKEN" "$ORDER"
 check "payment" "$(payment_status "$USER_TOKEN" "$ORDER")" SUCCEEDED
 wait_for "pet availability" 15 SOLD pet_status "$PET"
 wait_for "shipment created" 15 200 http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/shipments/order/$ORDER"
+wait_for "delivery started" 15 IN_TRANSIT api_json "$USER_TOKEN" "deliveries/order/$ORDER" "d['status']"
+wait_for "shipment mirrors IN_TRANSIT" 15 SHIPPED api_json "$USER_TOKEN" "shipments/order/$ORDER" "d['status']"
+check "admin: out for delivery (HTTP)" "$(advance_delivery "$ADMIN" "$ORDER" OUT_FOR_DELIVERY)" 200
+check "admin: delivered (HTTP)" "$(advance_delivery "$ADMIN" "$ORDER" DELIVERED)" 200
+check "admin: delivered -> out for delivery is illegal (HTTP)" "$(advance_delivery "$ADMIN" "$ORDER" OUT_FOR_DELIVERY)" 409
+check "delivery timeline" "$(api_json "$USER_TOKEN" "deliveries/order/$ORDER" "','.join(e['status'] for e in d['timeline'])")" \
+  "IN_TRANSIT,OUT_FOR_DELIVERY,DELIVERED"
+wait_for "shipment mirrors DELIVERED" 15 DELIVERED api_json "$USER_TOKEN" "shipments/order/$ORDER" "d['status']"
+check "shipping has no mutation endpoint (HTTP)" \
+  "$(http_code -X PUT -H "Authorization: Bearer $ADMIN" "$GATEWAY/api/v1/shipments/order/$ORDER/delivered")" 403
+wait_for "notifications" 20 "ORDER_CONFIRMED,SHIPPED,OUT_FOR_DELIVERY,DELIVERED" notification_types "$USER_TOKEN" "$ORDER"
+wait_for "tracking view" 20 "CONFIRMED SUCCEEDED DELIVERED DELIVERED False" tracking "$USER_TOKEN" "$ORDER" \
+  "' '.join(str(d['summary'][k]) for k in ('orderStatus','paymentStatus','shipmentStatus','deliveryStatus','escalated'))"
+wait_for "tracking timeline has every step" 20 True tracking "$USER_TOKEN" "$ORDER" \
+  "{'OrderCreated','PetReserved','PaymentSucceeded','OrderConfirmed','ShipmentCreated','DeliveryStatusUpdated','NotificationSent'} <= {e['eventType'] for e in d['timeline']}"
 SOLD_PET=$PET
+
+log "D. Delivery fails"
+PET=$(create_pet "$ADMIN")
+DORDER=$(order_pet "$USER_TOKEN" "$PET")
+wait_for "delivery started for order #$DORDER" 40 IN_TRANSIT api_json "$USER_TOKEN" "deliveries/order/$DORDER" "d['status']"
+check "admin: delivery failed (HTTP)" "$(advance_delivery "$ADMIN" "$DORDER" DELIVERY_FAILED)" 200
+wait_for "shipment mirrors DELIVERY_FAILED" 15 DELIVERY_FAILED api_json "$USER_TOKEN" "shipments/order/$DORDER" "d['status']"
+wait_for "tracking escalated" 20 "True DELIVERY_FAILED" tracking "$USER_TOKEN" "$DORDER" \
+  "str(d['summary']['escalated']) + ' ' + str(d['summary']['escalationReason'])"
+wait_for "DELIVERY_FAILED notification" 20 True api_json "$USER_TOKEN" "notifications/order/$DORDER" "'DELIVERY_FAILED' in [n['type'] for n in d]"
+check "admin lists escalated orders" "$(api_json "$ADMIN" "fulfillment/orders?escalated=true&size=200" "str(any(o['orderId']==$DORDER for o in d['content']))")" True
+check "customer cannot search all tracking (HTTP)" "$(http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/fulfillment/orders")" 403
+check "customer lists own tracking" "$(api_json "$USER_TOKEN" "fulfillment/orders/me?size=200" "str(any(o['orderId']==$DORDER for o in d['content']))")" True
 
 log "S. Security: ownership is enforced by each owning service"
 OWNER_ID=$(curl -sf -m 10 -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/orders/$ORDER" | json "d['customerId']")
@@ -100,7 +139,7 @@ OTHER_EMAIL="smoke-$(date +%s)$RANDOM@example.com"
 OTHER_TOKEN=$(curl -sf -m 10 -X POST "$GATEWAY/api/v1/auth/register" -H 'Content-Type: application/json' \
   -d "$(printf '{"email":"%s","password":"password123","firstName":"Smoke","lastName":"Other"}' "$OTHER_EMAIL")" | json "d['token']")
 for path in orders/$ORDER payments/order/$ORDER shipments/order/$ORDER notifications/order/$ORDER \
-            deliveries/order/$ORDER fulfillment/order/$ORDER; do
+            deliveries/order/$ORDER fulfillment/orders/$ORDER; do
   # owner first (also waits until the asynchronous record exists), then another customer, then admin
   wait_for "owner GET /$path" 15 200 http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/$path"
   check "other customer GET /$path" "$(http_code -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/$path")" 403
@@ -118,7 +157,7 @@ check "403 body from a service uses shared error shape" \
   "$(curl -s -m 10 -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/payments/order/$ORDER" | json "d['status'], d['error'], bool(d['correlationId'])")" \
   "403 Forbidden True"
 check "user on admin-only /users (HTTP)" "$(http_code -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/users")" 403
-check "user marks delivered (HTTP)" "$(http_code -X PUT -H "Authorization: Bearer $USER_TOKEN" "$GATEWAY/api/v1/deliveries/order/$ORDER/delivered")" 403
+check "user advances a delivery (HTTP)" "$(advance_delivery "$USER_TOKEN" "$ORDER" DELIVERED)" 403
 check "unknown order payment (HTTP)" "$(http_code -H "Authorization: Bearer $ADMIN" "$GATEWAY/api/v1/payments/order/999999999")" 404
 check "own profile from token (HTTP)" "$(http_code -H "Authorization: Bearer $OTHER_TOKEN" "$GATEWAY/api/v1/users/me")" 200
 
@@ -140,6 +179,8 @@ ORDER=$(order_pet "$USER_TOKEN" "$PET")
 wait_for "order #$ORDER status" 30 FAILED order_status "$USER_TOKEN" "$ORDER"
 check "payment" "$(payment_status "$USER_TOKEN" "$ORDER")" FAILED
 wait_for "pet released" 15 AVAILABLE pet_status "$PET"
+wait_for "ORDER_FAILED notification" 20 ORDER_FAILED notification_types "$USER_TOKEN" "$ORDER"
+wait_for "tracking" 20 "FAILED FAILED" tracking "$USER_TOKEN" "$ORDER" "d['summary']['orderStatus'] + ' ' + d['summary']['paymentStatus']"
 
 log "4. Customer cancels while the charge is in progress"
 restart_with "PAYMENT_SIMULATION_DELAY=PT8S" payment-service
@@ -150,6 +191,9 @@ check "cancel (HTTP)" "$(http_code -X PATCH -H "Authorization: Bearer $USER_TOKE
 wait_for "payment refunded after the slow charge" 30 REFUNDED payment_status "$USER_TOKEN" "$ORDER"
 check "order status" "$(order_status "$USER_TOKEN" "$ORDER")" CANCELLED
 wait_for "pet released" 15 AVAILABLE pet_status "$PET"
+wait_for "cancel + refund notifications" 20 True api_json "$USER_TOKEN" "notifications/order/$ORDER" \
+  "{'ORDER_CANCELLED','PAYMENT_REFUNDED'} <= {n['type'] for n in d}"
+wait_for "tracking" 20 "CANCELLED REFUNDED" tracking "$USER_TOKEN" "$ORDER" "d['summary']['orderStatus'] + ' ' + d['summary']['paymentStatus']"
 
 log "5. Reservation expires while the charge is in progress"
 restart_with "INVENTORY_RESERVATION_TIMEOUT=PT5S INVENTORY_EXPIRATION_CHECK_DELAY_MS=1000" inventory-service
@@ -159,6 +203,8 @@ ORDER=$(order_pet "$USER_TOKEN" "$PET")
 wait_for "order #$ORDER cancelled by expiry" 20 CANCELLED order_status "$USER_TOKEN" "$ORDER"
 wait_for "payment refunded after the slow charge" 40 REFUNDED payment_status "$USER_TOKEN" "$ORDER"
 wait_for "pet released" 15 AVAILABLE pet_status "$PET"
+wait_for "tracking" 20 "CANCELLED REFUNDED" tracking "$USER_TOKEN" "$ORDER" "d['summary']['orderStatus'] + ' ' + d['summary']['paymentStatus']"
+check "expiry wording" "$(api_json "$USER_TOKEN" "notifications/order/$ORDER" "str(any('in time' in n['message'] for n in d if n['type']=='ORDER_CANCELLED'))")" True
 
 log "Result: $PASSED passed, $FAILED failed"
 [ "$FAILED" -eq 0 ]
