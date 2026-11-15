@@ -12,7 +12,6 @@ import com.petcommerce.inventory.messaging.event.PaymentSucceededEvent;
 import com.petcommerce.inventory.messaging.event.PetCatalogEvent;
 import com.petcommerce.inventory.messaging.event.PetReservationExpiredEvent;
 import com.petcommerce.inventory.messaging.event.PetReservationFailedEvent;
-import com.petcommerce.inventory.messaging.event.PetReservationReleasedEvent;
 import com.petcommerce.inventory.messaging.event.PetReservedEvent;
 import com.petcommerce.inventory.messaging.event.PetsSoldEvent;
 import com.petcommerce.inventory.messaging.publisher.InventoryEventPublisher;
@@ -49,7 +48,6 @@ public class InventoryService {
     private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
     public static final String PET_RESERVED_TOPIC = "pet-reserved-events";
     public static final String PET_RESERVATION_FAILED_TOPIC = "pet-reservation-failed-events";
-    public static final String PET_RESERVATION_RELEASED_TOPIC = "pet-reservation-released-events";
     public static final String PET_RESERVATION_EXPIRED_TOPIC = "pet-reservation-expired-events";
     public static final String PETS_SOLD_TOPIC = "pets-sold-events";
     public static final String SALE_CONFLICT_TOPIC = "inventory-sale-conflict-events";
@@ -236,27 +234,20 @@ public class InventoryService {
         }
     }
 
-    /** Releases only pets still RESERVED for this order; pets sold or re-reserved by another order are untouched. */
+    /**
+     * Releases only pets still RESERVED for this order; pets sold or re-reserved by another order are untouched.
+     * The release is announced on inventory-status-events (pet-reservation-released-events was retired in Phase 4).
+     */
     private void releaseOrderReservations(Long orderId, UUID correlationId) {
         List<PetInventory> reservedForOrder = petInventoryRepository.findByOrderId(orderId);
         for (PetInventory inventory : reservedForOrder) {
             if (inventory.getStatus() == InventoryStatus.RESERVED) {
-                UUID reservationId = inventory.getReservationId();
                 inventory.setStatus(InventoryStatus.AVAILABLE);
                 inventory.setOrderId(null);
                 inventory.setReservationId(null);
                 inventory.setReservedAt(null);
                 inventory.setReservationExpiresAt(null);
                 petInventoryRepository.save(inventory);
-                eventPublisher.publish(
-                        PET_RESERVATION_RELEASED_TOPIC,
-                        inventory.getPetId().toString(),
-                        new PetReservationReleasedEvent(UUID.randomUUID(), "PetReservationReleasedEvent", 1, inventory.getPetId(), Instant.now(), correlationId, orderId, reservationId, inventory.getPetId()),
-                        "PetReservationReleasedEvent",
-                        inventory.getPetId(),
-                        orderId,
-                        correlationId
-                );
                 publishCatalogStatusSync(inventory.getPetId(), InventoryStatus.AVAILABLE, orderId, correlationId);
                 log.info("Released reservation for pet {} on order {}", inventory.getPetId(), orderId);
             }

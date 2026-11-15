@@ -48,11 +48,6 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderResponse create(CreateOrderRequest request) {
-        return create(request, null);
-    }
-
-    @Transactional
     public OrderResponse create(CreateOrderRequest request, Authentication authentication) {
         if (request.items() == null || request.items().isEmpty()) {
             throw new IllegalArgumentException("items must not be empty");
@@ -95,11 +90,6 @@ public class OrderCommandService {
         log.info("Created order {} for customer {} with total {} and queued OrderCreatedEvent",
                 savedOrder.getId(), savedOrder.getCustomerId(), savedOrder.getTotalAmount());
         return OrderMapper.toResponse(savedOrder);
-    }
-
-    @Transactional
-    public OrderResponse cancel(Long orderId) {
-        return cancel(orderId, null);
     }
 
     @Transactional
