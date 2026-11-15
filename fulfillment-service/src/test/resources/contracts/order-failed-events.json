@@ -1,0 +1,1 @@
+{"eventId":"56e5733c-cb08-49e7-bb62-6c631873af10","eventType":"OrderFailedEvent","eventVersion":1,"aggregateId":"3f92104d-9dc9-431b-8edb-a87ced0c5b8d","timestamp":"2026-11-14T08:25:00.886082086Z","correlationId":"6ebf1ac2-b740-4422-afe1-6250c551874e","orderId":8,"customerId":2,"petIds":["efd2915d-f50b-4384-b808-dc8559be4c08"],"reason":"PAYMENT_FAILED:PAYMENT_DECLINED"}

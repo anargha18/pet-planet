@@ -1,7 +1,7 @@
 package com.petcommerce.fulfillment.api.error;
 
 import com.petcommerce.platform.web.ApiError;
-import com.petcommerce.fulfillment.domain.exception.FulfillmentNotFoundException;
+import com.petcommerce.fulfillment.domain.exception.TrackingNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(FulfillmentNotFoundException.class)
-    public ResponseEntity<ApiError> notFound(FulfillmentNotFoundException ex, HttpServletRequest request) {
+    @ExceptionHandler(TrackingNotFoundException.class)
+    public ResponseEntity<ApiError> notFound(TrackingNotFoundException ex, HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiError.of(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI()));
     }

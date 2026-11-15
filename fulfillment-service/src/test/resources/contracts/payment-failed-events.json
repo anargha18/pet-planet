@@ -1,0 +1,1 @@
+{"eventId":"6840fff1-a072-419a-9474-4d4b6c9e40b6","eventType":"PaymentFailedEvent","eventVersion":1,"aggregateId":"44972cf3-0bb8-4b35-a37d-1d48a3487f7f","timestamp":"2026-11-15T07:35:25.491178920Z","correlationId":"72ea047d-3265-4846-8efa-75e56ac4b0db","orderId":19,"paymentId":"c7d99a84-5220-494e-a6fb-1a53deece710","amount":123.45,"reason":"PAYMENT_DECLINED","customerId":2}

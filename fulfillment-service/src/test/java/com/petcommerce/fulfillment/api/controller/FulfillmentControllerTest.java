@@ -2,8 +2,8 @@ package com.petcommerce.fulfillment.api.controller;
 
 import com.petcommerce.platform.security.AuthenticatedCaller;
 import com.petcommerce.platform.security.TestJwtIssuer;
-import com.petcommerce.fulfillment.application.FulfillmentService;
-import com.petcommerce.fulfillment.domain.exception.FulfillmentNotFoundException;
+import com.petcommerce.fulfillment.application.OrderTrackingQueryService;
+import com.petcommerce.fulfillment.domain.exception.TrackingNotFoundException;
 import com.petcommerce.fulfillment.security.SecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,26 +39,26 @@ class FulfillmentControllerTest {
     private MockMvc mvc;
 
     @MockBean
-    private FulfillmentService service;
+    private OrderTrackingQueryService service;
 
     @Test
     void requestWithoutTokenIs401() throws Exception {
-        mvc.perform(get("/api/v1/fulfillment/order/10"))
+        mvc.perform(get("/api/v1/fulfillment/orders/10"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.path").value("/api/v1/fulfillment/order/10"));
+                .andExpect(jsonPath("$.path").value("/api/v1/fulfillment/orders/10"));
         verify(service, never()).getForOrder(any(), any());
     }
 
     @Test
     void forgedTokenIs401() throws Exception {
-        mvc.perform(get("/api/v1/fulfillment/order/10").header("Authorization", bearer(TestJwtIssuer.tokenFromUntrustedKey(7))))
+        mvc.perform(get("/api/v1/fulfillment/orders/10").header("Authorization", bearer(TestJwtIssuer.tokenFromUntrustedKey(7))))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void callerFromTokenIsPassedToTheOwnershipCheck() throws Exception {
-        mvc.perform(get("/api/v1/fulfillment/order/10").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
+        mvc.perform(get("/api/v1/fulfillment/orders/10").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
                 .andExpect(status().isOk());
         verify(service).getForOrder(eq(10L), eq(new AuthenticatedCaller(7L, "user7@example.com", false)));
     }
@@ -67,7 +67,7 @@ class FulfillmentControllerTest {
     void foreignOwnerIs403WithSharedErrorBody() throws Exception {
         when(service.getForOrder(eq(10L), any())).thenThrow(new AccessDeniedException("not yours"));
 
-        mvc.perform(get("/api/v1/fulfillment/order/10").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
+        mvc.perform(get("/api/v1/fulfillment/orders/10").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.error").value("Forbidden"))
@@ -76,12 +76,27 @@ class FulfillmentControllerTest {
 
     @Test
     void missingRecordIs404WithSharedErrorBody() throws Exception {
-        when(service.getForOrder(eq(10L), any())).thenThrow(new FulfillmentNotFoundException(10L));
+        when(service.getForOrder(eq(10L), any())).thenThrow(new TrackingNotFoundException(10L));
 
-        mvc.perform(get("/api/v1/fulfillment/order/10").header("Authorization", bearer(TestJwtIssuer.adminToken(1))))
+        mvc.perform(get("/api/v1/fulfillment/orders/10").header("Authorization", bearer(TestJwtIssuer.adminToken(1))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("found for order 10")));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("order 10")));
+    }
+
+    @Test
+    void ownOrdersUseTheTokenCaller() throws Exception {
+        mvc.perform(get("/api/v1/fulfillment/orders/me").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
+                .andExpect(status().isOk());
+        verify(service).getMine(eq(new AuthenticatedCaller(7L, "user7@example.com", false)), any());
+    }
+
+    @Test
+    void searchPassesFiltersAndUserIsRejectedByTheService() throws Exception {
+        when(service.search(eq(5L), eq(true), any(), any())).thenThrow(new AccessDeniedException("Admin role required"));
+
+        mvc.perform(get("/api/v1/fulfillment/orders?customerId=5&escalated=true").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
+                .andExpect(status().isForbidden());
     }
 
     private static String bearer(String token) {
