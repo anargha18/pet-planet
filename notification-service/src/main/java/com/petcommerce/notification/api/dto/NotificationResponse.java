@@ -1,6 +1,7 @@
 package com.petcommerce.notification.api.dto;
 
 import com.petcommerce.notification.domain.model.NotificationStatus;
+import com.petcommerce.notification.domain.model.NotificationType;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -9,6 +10,7 @@ public record NotificationResponse(
         UUID id,
         Long orderId,
         Long customerId,
+        NotificationType type,
         String message,
         NotificationStatus status,
         Instant createdAt,

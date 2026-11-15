@@ -112,7 +112,7 @@ public class PaymentService {
             log.info("Payment succeeded for order {} with payment {} amount {}", event.orderId(), payment.getPaymentId(), payment.getAmount());
             eventPublisher.publish(PAYMENT_SUCCEEDED_TOPIC, event.orderId().toString(),
                     new PaymentSucceededEvent(UUID.randomUUID(), "PaymentSucceededEvent", 1, event.aggregateId(), Instant.now(),
-                            event.correlationId(), event.orderId(), payment.getPaymentId(), payment.getAmount()),
+                            event.correlationId(), event.orderId(), payment.getPaymentId(), payment.getAmount(), payment.getCustomerId()),
                     payment.getPaymentId(), event.orderId());
             return payment;
         }
@@ -122,7 +122,8 @@ public class PaymentService {
         log.warn("Payment failed for order {} with payment {}: {}", event.orderId(), payment.getPaymentId(), result.failureReason());
         eventPublisher.publish(PAYMENT_FAILED_TOPIC, event.orderId().toString(),
                 new PaymentFailedEvent(UUID.randomUUID(), "PaymentFailedEvent", 1, event.aggregateId(), Instant.now(),
-                        event.correlationId(), event.orderId(), payment.getPaymentId(), payment.getAmount(), result.failureReason()),
+                        event.correlationId(), event.orderId(), payment.getPaymentId(), payment.getAmount(), result.failureReason(),
+                        payment.getCustomerId()),
                 payment.getPaymentId(), event.orderId());
         return payment;
     }
@@ -155,7 +156,7 @@ public class PaymentService {
         log.info("Refunded payment {} of {} for closed order {} ({})", payment.getPaymentId(), payment.getAmount(), orderId, reason);
         eventPublisher.publish(PAYMENT_REFUNDED_TOPIC, orderId.toString(),
                 new PaymentRefundedEvent(UUID.randomUUID(), "PaymentRefundedEvent", 1, UUID.randomUUID(), Instant.now(),
-                        correlationId, orderId, payment.getPaymentId(), payment.getAmount(), reason),
+                        correlationId, orderId, payment.getPaymentId(), payment.getAmount(), reason, payment.getCustomerId()),
                 payment.getPaymentId(), orderId);
     }
 

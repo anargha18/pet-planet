@@ -13,6 +13,8 @@ public record PaymentSucceededEvent(
         UUID correlationId,
         Long orderId,
         UUID paymentId,
-        BigDecimal amount
+        BigDecimal amount,
+        /** Owner of the order (additive, Phase 4); null for payments created before payment V4. */
+        Long customerId
 ) {
 }

@@ -14,6 +14,8 @@ public record PaymentFailedEvent(
         Long orderId,
         UUID paymentId,
         BigDecimal amount,
-        String reason
+        String reason,
+        /** Owner of the order (additive, Phase 4); null for payments created before payment V4. */
+        Long customerId
 ) {
 }
