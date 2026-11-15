@@ -23,11 +23,6 @@ public class KafkaConfig {
     }
 
     @Bean
-    NewTopic petReservationReleasedEventsTopic() {
-        return TopicBuilder.name("pet-reservation-released-events").partitions(1).replicas(1).build();
-    }
-
-    @Bean
     NewTopic petReservationExpiredEventsTopic() {
         return TopicBuilder.name("pet-reservation-expired-events").partitions(1).replicas(1).build();
     }

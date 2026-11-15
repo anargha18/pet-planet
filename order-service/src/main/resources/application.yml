@@ -44,6 +44,9 @@ management:
 pet:
   catalog:
     base-url: ${PET_CATALOG_URL:http://localhost:8080}
+    # R-SVC-04: a slow or dead catalog fails the order request quickly (503) instead of hanging it.
+    connect-timeout: ${PET_CATALOG_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${PET_CATALOG_READ_TIMEOUT:PT5S}
 
 # Token validation (platform-commons): public key only. No default: run scripts/generate-dev-keys.sh.
 jwt:

@@ -11,7 +11,7 @@ This is a good fit because the change is small, fast, and stateful. We avoid pes
 ## Events
 
 - Consumes: `order-created-events`
-- Produces: `pet-reserved-events`, `pet-reservation-failed-events`, `pet-reservation-released-events`, `pet-reservation-expired-events`
+- Produces: `pet-reserved-events`, `pet-reservation-failed-events`, `pet-reservation-expired-events`
 
 ## Status values
 

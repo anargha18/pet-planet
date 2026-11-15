@@ -27,20 +27,10 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse getOrder(Long orderId) {
-        return getOrder(orderId, null);
-    }
-
-    @Transactional(readOnly = true)
     public OrderResponse getOrder(Long orderId, Authentication authentication) {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
         orderAccessPolicy.checkCanAccess(order, authentication);
         return OrderMapper.toResponse(order);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<OrderResponse> getOrders(Long customerId, OrderStatus status, Pageable pageable) {
-        return getOrders(customerId, status, null, pageable);
     }
 
     @Transactional(readOnly = true)
