@@ -1,5 +1,6 @@
 package com.petcommerce.delivery.domain.model;
 
+import com.petcommerce.delivery.domain.exception.InvalidDeliveryTransitionException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,6 +13,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
+/** Current carrier status of one order's delivery; every change is also recorded as a {@link DeliveryEvent}. */
 @Entity
 @Table(name = "delivery_records")
 public class DeliveryRecord {
@@ -33,6 +35,10 @@ public class DeliveryRecord {
     @Column(name = "status", nullable = false)
     private DeliveryStatus status;
 
+    /** Saga correlation ID taken from ShipmentCreated, reused for the admin's later status events (R-EVT-08). */
+    @Column(name = "correlation_id")
+    private UUID correlationId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -45,13 +51,27 @@ public class DeliveryRecord {
     protected DeliveryRecord() {
     }
 
-    public DeliveryRecord(Long orderId, Long customerId, String trackingNumber, DeliveryStatus status) {
+    /** A new delivery starts {@link DeliveryStatus#IN_TRANSIT}: the carrier has the parcel. */
+    public DeliveryRecord(Long orderId, Long customerId, String trackingNumber, UUID correlationId) {
         this.orderId = orderId;
         this.customerId = customerId;
         this.trackingNumber = trackingNumber;
-        this.status = status;
+        this.correlationId = correlationId;
+        this.status = DeliveryStatus.IN_TRANSIT;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
+    }
+
+    /** Applies one transition, or throws {@link InvalidDeliveryTransitionException} (→ 409). */
+    public void advanceTo(DeliveryStatus next, Instant at) {
+        if (!status.canMoveTo(next)) {
+            throw new InvalidDeliveryTransitionException(orderId, status, next);
+        }
+        this.status = next;
+        this.updatedAt = at;
+        if (next == DeliveryStatus.DELIVERED) {
+            this.deliveredAt = at;
+        }
     }
 
     public UUID getId() {
@@ -74,12 +94,8 @@ public class DeliveryRecord {
         return status;
     }
 
-    public void setStatus(DeliveryStatus status) {
-        this.status = status;
-        this.updatedAt = Instant.now();
-        if (DeliveryStatus.DELIVERED.equals(status)) {
-            this.deliveredAt = Instant.now();
-        }
+    public UUID getCorrelationId() {
+        return correlationId;
     }
 
     public Instant getCreatedAt() {

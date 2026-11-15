@@ -45,12 +45,31 @@ public class Shipment {
     protected Shipment() {
     }
 
-    public Shipment(Long orderId, Long customerId, ShipmentStatus status, String trackingNumber) {
+    /** A new shipment is {@link ShipmentStatus#CREATED}; it becomes SHIPPED once the carrier reports progress. */
+    public Shipment(Long orderId, Long customerId, String trackingNumber) {
         this.orderId = orderId;
         this.customerId = customerId;
-        this.status = status;
+        this.status = ShipmentStatus.CREATED;
         this.trackingNumber = trackingNumber;
         this.createdAt = Instant.now();
+    }
+
+    /**
+     * Mirrors a delivery status reported by delivery-tracking. Never leaves a terminal status and never moves back
+     * (DELIVERED/DELIVERY_FAILED stay; SHIPPED is not reset to CREATED). Returns whether anything changed.
+     */
+    public boolean mirrorDelivery(ShipmentStatus next, Instant at) {
+        if (next == null || status.isTerminal() || next == status || next == ShipmentStatus.CREATED) {
+            return false;
+        }
+        if (shippedAt == null) {
+            shippedAt = at;
+        }
+        if (next == ShipmentStatus.DELIVERED) {
+            deliveredAt = at;
+        }
+        status = next;
+        return true;
     }
 
     public UUID getId() {
@@ -69,10 +88,6 @@ public class Shipment {
         return status;
     }
 
-    public void setStatus(ShipmentStatus status) {
-        this.status = status;
-    }
-
     public String getTrackingNumber() {
         return trackingNumber;
     }
@@ -85,15 +100,8 @@ public class Shipment {
         return shippedAt;
     }
 
-    public void setShippedAt(Instant shippedAt) {
-        this.shippedAt = shippedAt;
-    }
-
     public Instant getDeliveredAt() {
         return deliveredAt;
     }
 
-    public void setDeliveredAt(Instant deliveredAt) {
-        this.deliveredAt = deliveredAt;
-    }
 }

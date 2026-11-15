@@ -3,6 +3,10 @@ package com.petcommerce.delivery.messaging.event;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Published on every delivery status change. {@code previousStatus} (null for the first, IN_TRANSIT event) and
+ * {@code note} were added in Phase 4; both are additive, so older consumers ignore them.
+ */
 public record DeliveryStatusUpdatedEvent(
         UUID eventId,
         String eventType,
@@ -14,6 +18,8 @@ public record DeliveryStatusUpdatedEvent(
         Long customerId,
         UUID deliveryId,
         String trackingNumber,
-        String status
+        String status,
+        String previousStatus,
+        String note
 ) {
 }

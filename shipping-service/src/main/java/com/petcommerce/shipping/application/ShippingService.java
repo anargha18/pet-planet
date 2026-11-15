@@ -6,6 +6,7 @@ import com.petcommerce.shipping.api.mapper.ShipmentMapper;
 import com.petcommerce.shipping.domain.exception.ShipmentNotFoundException;
 import com.petcommerce.shipping.domain.model.Shipment;
 import com.petcommerce.shipping.domain.model.ShipmentStatus;
+import com.petcommerce.shipping.messaging.event.DeliveryStatusUpdatedEvent;
 import com.petcommerce.shipping.messaging.event.OrderConfirmedEvent;
 import com.petcommerce.shipping.messaging.event.ShipmentCreatedEvent;
 import com.petcommerce.shipping.messaging.publisher.ShipmentEventPublisher;
@@ -65,15 +66,6 @@ public class ShippingService {
     }
 
     @Transactional
-    public Shipment markDelivered(Long orderId) {
-        Shipment shipment = shipmentRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new ShipmentNotFoundException(orderId));
-        shipment.setStatus(ShipmentStatus.DELIVERED);
-        shipment.setDeliveredAt(Instant.now());
-        return shipmentRepository.save(shipment);
-    }
-
-    @Transactional
     public Shipment handleOrderConfirmedEvent(OrderConfirmedEvent event) {
         if (event == null || event.orderId() == null) {
             return null;
@@ -96,9 +88,7 @@ public class ShippingService {
         }
         Long customerId = event.customerId();
         String trackingNumber = "PET-" + event.orderId() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        Shipment shipment = new Shipment(event.orderId(), customerId, ShipmentStatus.SHIPPED, trackingNumber);
-        shipment.setShippedAt(Instant.now());
-        shipmentRepository.save(shipment);
+        Shipment shipment = shipmentRepository.save(new Shipment(event.orderId(), customerId, trackingNumber));
 
         ShipmentCreatedEvent shipmentCreatedEvent = new ShipmentCreatedEvent(
                 UUID.randomUUID(),
@@ -120,4 +110,32 @@ public class ShippingService {
         return shipment;
     }
 
+    /**
+     * Mirrors delivery-tracking's status onto the shipment (R-SVC-03). Idempotent (processed_events) and monotonic:
+     * a terminal shipment never changes. An event for an unknown order (e.g. history from before this consumer
+     * existed) is logged and skipped rather than dead-lettered, because there is nothing to mirror it onto.
+     */
+    @Transactional
+    public Shipment handleDeliveryStatusUpdatedEvent(DeliveryStatusUpdatedEvent event) {
+        if (event == null || event.orderId() == null || event.eventId() == null) {
+            return null;
+        }
+        if (processedEventRepository.markProcessed(event.eventId()) == 0) {
+            log.info("Skipping already processed DeliveryStatusUpdatedEvent {}", event.eventId());
+            return null;
+        }
+        Shipment shipment = shipmentRepository.findByOrderId(event.orderId()).orElse(null);
+        if (shipment == null) {
+            log.warn("No shipment for order {}; ignoring delivery status {}", event.orderId(), event.status());
+            return null;
+        }
+        ShipmentStatus previous = shipment.getStatus();
+        Instant at = event.timestamp() != null ? event.timestamp() : Instant.now();
+        if (shipment.mirrorDelivery(ShipmentStatus.mirroring(event.status()), at)) {
+            shipmentRepository.save(shipment);
+            log.info("Shipment of order {} mirrored delivery status {}: {} -> {}",
+                    event.orderId(), event.status(), previous, shipment.getStatus());
+        }
+        return shipment;
+    }
 }

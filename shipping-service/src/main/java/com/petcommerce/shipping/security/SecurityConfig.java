@@ -9,7 +9,7 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * Validates the caller's JWT with the shared platform setup (R-SEC-02) and applies this service's URL rules.
- * Reads for any signed-in user (ownership checked in the application service); marking delivered is admin-only.
+ * Read-only: any signed-in user (ownership checked in the application service).
  */
 @Configuration
 public class SecurityConfig {
@@ -19,7 +19,6 @@ public class SecurityConfig {
         platform.apply(http)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PlatformHttpSecurity.PUBLIC_PATHS).permitAll()
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/shipments/order/*/delivered").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/shipments/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().denyAll());
         return http.build();

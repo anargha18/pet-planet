@@ -85,20 +85,10 @@ class ShippingControllerTest {
     }
 
     @Test
-    void markingDeliveredIsAdminOnly() throws Exception {
-        mvc.perform(put("/api/v1/shipments/order/10/delivered").header("Authorization", bearer(TestJwtIssuer.userToken(7))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.status").value(403));
-        verify(service, never()).markDelivered(any());
-    }
-
-    @Test
-    void markDeliveredUnknownOrderIs404() throws Exception {
-        when(service.markDelivered(10L)).thenThrow(new ShipmentNotFoundException(10L));
-
+    void thereIsNoMutationEndpoint() throws Exception {
+        // R-SAGA-06 / R-SVC-03: delivery is advanced only in delivery-tracking; shipping mirrors it.
         mvc.perform(put("/api/v1/shipments/order/10/delivered").header("Authorization", bearer(TestJwtIssuer.adminToken(1))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.status").value(404));
+                .andExpect(status().isForbidden());
     }
 
     private static String bearer(String token) {
