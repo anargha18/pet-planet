@@ -1,85 +1,36 @@
 # Implementation status
 
-## Status definitions
+**As of 2026-11-15, after restructuring Phase 6.** "Verified" means a named, repeatable check demonstrates the behavior: a test in `./mvnw verify`, a scenario in `make smoke`, or a check in `make ui-check`. Anything else is labelled. The history of how the system got here is in the [restructuring plan's progress log](../restructuring/02-target-architecture-and-requirements.md#progress-log); the defects found on 2026-11-13 are in the [audit](../restructuring/01-audit-findings.md).
 
-- **Implemented:** code/configuration for the capability exists. This does not imply runtime or end-to-end verification.
-- **Partially implemented:** some capability exists, but important business wiring, integration, or lifecycle is absent.
-- **Planned:** explicitly identified as future work in repository evidence. No formal roadmap was found.
-- **Unverified:** not checked against a live database/runtime/build/test.
+## Features
 
-## Feature status
-
-| Feature | Status | Evidence and qualification |
+| Feature | Status | Evidence |
 |---|---|---|
-| Pet catalog CRUD/search | Implemented | Catalog controller/service/entity/repository/migration exist. No catalog authorization configuration. |
-| Order create/list/get/cancel | Implemented, partial workflow | Order persists item snapshots and synchronously validates catalog pets. Does not publish the event that starts inventory. |
-| Inventory reserve/expiry/sold | Implemented as service capability | Kafka consumers, REST operations, optimistic version field, expiration scheduler, migration. Checkout does not trigger reservation. |
-| Payment | Implemented simulation | Consumes reserved event, fixed amount, configurable simulated result; no gateway or payment REST API. |
-| Notifications | Implemented as local records | Confirmed event creates record and immediately marks it sent; no external delivery. |
-| Shipping/delivery | Partially implemented | Local tracking/shipment/delivery records and manual delivered operation; no carrier integration. |
-| Fulfillment | Partially implemented | Consumes delivery status and creates a record; later status updates do not update existing record. |
-| User registration/login/JWT | Implemented in user-service | BCrypt/JWT and protected profile/admin endpoints; other services do not validate tokens. |
-| React storefront | Present, partly integrated | Catalog/auth/order calls and local cart. Downstream APIs are not used in UI. |
-| Live database schema | Unknown | Migrations were inspected; live DB and Flyway history were not inspected. |
-| Runtime/build/test status | Unverified | Services, containers, builds, and tests were not run. |
+| One-command local stack | Verified | `make up` builds and starts 13 containers, all healthy. A fresh clone with no `.env` and new volumes started healthy and passed `make smoke` on 2026-11-15 (Phase 6). |
+| Identity and tokens (user-service) | Verified | BCrypt credentials, register/login, RS256 JWTs signed only by user-service (`sub` = user ID). Self-service profile/password; admin user CRUD with soft deactivation and a last-admin guard. Tests: `TokenIssuerTest`, `UserControllerTest`, seed-hash test; smoke: both seeded logins, registration. UI: profile page, admin users page. |
+| Gateway | Verified | Validates tokens, applies coarse role rules, CORS (including on 401/403), never routes `/internal/**`, adds `X-Correlation-Id`. Test: `GatewaySecurityTest`; smoke scenario S. |
+| Service-level security and ownership | Verified | Every service validates the JWT itself (shared platform-commons setup). Order, payment, notification, shipping, delivery-tracking and fulfillment return 403 for another customer's records; admins see all. One shared error body. Tests: per-service `*OwnershipTest`/`*ControllerTest`, `PlatformSecurityTest`; smoke scenario S. |
+| Pet catalog | Verified | Public browse/search, admin create/edit/archive (`RETIRED`; 409 for reserved or sold pets). Availability is a read-only copy synced from inventory. Tests: `PetServiceTest`; smoke scenario 2; UI: admin pets page. |
+| Checkout saga | Verified | `CREATED → PAYMENT_PENDING → CONFIRMED`, with `CANCELLED`/`FAILED` terminal and enforced in one place (`OrderStateMachine`). An order is confirmed only after inventory sold the pets. Smoke covers: happy path (1); payment declined (3); cancel during a slow charge (4); reservation expiry during a slow charge (5); two customers racing for one pet, where exactly one wins and the other gets `PetReservationFailed` and is never charged (R). |
+| Inventory | Verified | All-or-nothing reservation, sale only while still reserved for that order (otherwise `InventorySaleConflict`), release on cancel/failure, configurable expiry, read-only admin API (single pet and paged overview). Tests: `InventoryServiceTest`, `InventoryControllerTest`; smoke scenarios 1–5 and R. |
+| Payment (simulated, DEC-4) | Verified | Charges the order total automatically, refunds a successful charge when the order is cancelled or failed, and never charges a closed order (per-order advisory lock). Tests: `PaymentServiceTest`; smoke scenarios 3–5. There is no real payment provider. |
+| Shipping and delivery | Verified | Shipping creates shipments and mirrors delivery status (read-only API). Delivery-tracking owns the one admin action `PUT /api/v1/deliveries/order/{id}/status` (`IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED / DELIVERY_FAILED`; illegal moves 409) and a timeline. Tests: `DeliveryStatusTest`, `DeliveryTrackingServiceTest`, `ShippingServiceTest`; smoke scenarios 1 and D; UI: admin deliveries page. |
+| Notifications | Verified | One typed notification per order and type (8 types) with reason-specific wording; lists per order, customer and `/me`. Sending is simulated: stored and marked `SENT`, with no e-mail. Tests: `NotificationServiceTest`; smoke scenarios 1, 3, 4, 5, D, R. |
+| Order-tracking projection (fulfillment) | Verified | CQRS view from 12 topics with a timeline. Idempotent via the timeline's event IDs, row-locked per order, monotonic under any event order. Escalates on delivery failure and on orders stuck before confirmation, and clears the stuck flag when the order closes. Tests: `OrderTrackingTest`, `OrderTrackingProjectorTest`, `EscalationServiceTest`, and `OrderTrackingProjectionPostgresTest` (real PostgreSQL: out-of-order events, replay, 5 concurrent listeners on one new order); smoke scenarios 1, D and 6 (live stuck-order escalation and clearing). |
+| Event backbone | Verified | Transactional outbox in 7 producers with a shared relay (publish after broker ack), plain-JSON contracts, retries then `<topic>.DLT`, idempotent consumers. Tests: `OutboxRelayTest`, `KafkaPlatformIntegrationTest` (real Kafka: legacy messages, DLT), consumer `EventContractTest`s from captured producer JSON. |
+| Storefront | Verified | One API client with token/401 handling (expired session → `/login?expired=1`), protected and admin routes, role-aware navigation, profile, orders and tracking with live polling after checkout, admin pets/inventory/orders/users/deliveries. Check: `make ui-check` (29 checks) and the Postman collection for the same API flows. |
+| Code structure | Verified | Per-service package layout enforced by 11 ArchUnit rules per service; frontend feature boundaries by `npm run check:boundaries`. |
 
-## Critical workflow and integration gaps
+## Known limitations
 
-1. **Order-to-inventory event missing.** `OrderService.create` persists and returns the order but does not publish `order-created-events`. `InventoryEventConsumer` listens on this topic, and no producer was found. The checkout pathway therefore does not start reservation or payment.
-2. **Customer identity incompatible.** User ID is UUID; order request and database use numeric `Long`. Frontend converts current profile ID with `Number`, which is not a valid mapping. Order trusts client-supplied ID; downstream projections use fixed customer IDs.
-3. **Payment simulation disconnected and fixed amount.** Payment consumes `pet-reserved-events`, sets a constant amount/USD, and does not use order total or payment provider.
-4. **Incomplete compensation.** Payment failure marks order failed but does not release inventory; cancellation emits no release; reservation failure/expiry/release topics have no consumers found.
-5. **Outbox not relayed.** Outbox records are stored, but publication uses a direct post-commit Kafka send. No retry/relay process or `published_at` updater was found; loss recovery is not established.
-6. **Projection updates incomplete.** Fulfillment handler returns existing order record without applying newer delivery status.
-7. **Fixed customer identity.** Notification, shipping, delivery, and fulfillment handlers assign hardcoded customer ID rather than propagating order/user identity.
+These are deliberate scope limits or open items, not hidden defects. Owners and details are in [`memory/KNOWN_ISSUES.md`](../../memory/KNOWN_ISSUES.md).
 
-## Frontend integration gaps
+- **Learning-project scope:** payment and notifications are simulated. There is no production deployment, TLS between services, rate limiting or secrets manager. The internal gateway token only protects user-service inside Compose.
+- **Events:** the full envelope of R-EVT-02 (`causationId`, `producer`, `aggregateId` = order) is not implemented. order-service starts a new saga `correlationId` instead of reusing the HTTP request's correlation ID.
+- **Tests:** only `platform-commons` (Kafka) and fulfillment (PostgreSQL) have Testcontainers tests. The other services' consumer→producer hops are covered by unit tests, contract fixtures and the smoke test (R-TEST-01 partly done). There are no contract fixtures for `pet-reservation-expired-events` and `pet-catalog-events`. The frontend has no unit tests, only the `make ui-check` walkthrough.
+- **History:** the pre-restructuring development RSA key is still in git history (rotated out of the tree). Payments created before payment `V4` have no owner and are admin-only. Retired topics `fulfillment-updated-events` and `pet-reservation-released-events` still exist in Kafka with their old messages.
+- **UI:** the admin deliveries page filters a 50-row page of the tracking view to shipped orders. No favicon.
 
-- Cart exists in local storage only, with one entry per pet and quantity one.
-- Registration ignores returned auth token and navigates to login.
-- Checkout uses editable customer ID; UUID-to-number mismatch persists.
-- Catalog DTO/entity has no image property; pages use fallbacks (including remote Unsplash image URLs).
-- No inventory/payment/notification/shipping/delivery/fulfillment integration, order history, tracking UI, admin UI, or profile editing.
-- Category page links use query parameters; query parsing in the pets page should be verified before relying on them.
-- Product name search is client-side over currently loaded page; no backend name query parameter exists.
+## Re-verifying
 
-## Known limitations and technical debt
-
-- `PAYMENT_PENDING` enum state has no discovered transition.
-- Inventory missing rows default to available in code; no catalog-to-inventory synchronization or verified seed data exists.
-- Notifications are marked SENT without an actual send.
-- No payment gateway, carrier, email/SMS/push provider, image upload/storage, shipping address/quotes, tax/shipping calculation, or external tracking.
-- No many-item/quantity model; order SQL enforces quantity = 1.
-- Separate database IDs are not joined across services by foreign keys; customer IDs are inconsistent.
-- Single Kafka broker, one-partition/replica topic declarations, plaintext listeners; no production deployment config found.
-- Compose has Postgres/Kafka health checks but no backend health checks. Frontend container runs Vite dev server.
-- Timestamp SQL migrations mix `TIMESTAMPTZ` and `TIMESTAMP`; actual schema validation unverified.
-- No frontend test/lint script; no user-service tests found.
-
-## Planned features and recommendations
-
-No formal roadmap or explicit planned backlog was found. Therefore, items below are **not committed plans**. They are functionality absent from the source or suggestions in the former context document, not project requirements:
-
-- Production-grade payment processing/reconciliation and payment method flow.
-- Complete event-driven checkout with explicit failure compensation and outbox retry semantics.
-- Persistent cart and multi-quantity products.
-- Customer identity linking/profile editing/order history and authorization across services.
-- Admin catalog/role UI.
-- External notification, carrier, and tracking integrations.
-- Pet image management/storage and richer product categories.
-- Frontend tests, end-to-end workflow tests, service readiness checks, and production security/deployment controls.
-
-## Open questions and verification gaps
-
-- Is the intended customer identifier numeric or the UUID user identity?
-- Should order creation publish an event, or is a separate checkout/payment initiation step intended?
-- What should happen on reservation failure/expiry, cancellation, and payment failure?
-- Should payment use order total, and what are the currency/rounding requirements?
-- Is an outbox relay/retry worker intended, or are outbox rows only retained for audit?
-- Should later `DELIVERED` events update an existing fulfillment record?
-- Are seed pets/customers expected for local startup?
-- Do migrations and Hibernate mappings validate against PostgreSQL 16? Not run.
-- Does the full Compose startup and frontend-to-backend flow work from a clean volume? Not run.
-- What are intended production auth, CORS, TLS, broker security, secret management, health checks, and deployment model?
-- Existing worktree modifications were present during the review. Their provenance/scope is unknown; inspect `git status` before changing or committing.
-
+`make verify` (backend, needs Docker), then with the stack up: `make smoke`, `make ui-check`. Last results are recorded in [Testing](./testing.md).

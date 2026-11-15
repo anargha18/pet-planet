@@ -1,268 +1,34 @@
 # Database design
 
-## Overview and verification
+## Overview
 
-- PostgreSQL container image: `postgres:16-alpine`; live server/database versions and schema were not inspected.
-- Compose/init configuration provides one service-specific database and role for each of catalog, order, inventory, payment, notification, shipping, delivery, fulfillment, and user, hosted on the same local PostgreSQL container. The bootstrap/default database also exists.
-- Flyway is enabled at `classpath:db/migration` for all services. Each service config uses Hibernate `ddl-auto: validate`.
-- Migration SQL is the primary source for physical column types and declared constraints below. No database was connected to, no Flyway history was checked, and no Hibernate validation was run.
-- No migration declares a cross-service foreign key. The only declared FK is `order_items.order_id -> orders.id`.
-- Status/role enums are varchar columns without SQL check constraints. There are no soft-delete columns or database audit triggers in the inspected migrations.
+- PostgreSQL 16 (`postgres:16-alpine`) hosts nine service-specific databases (`petplanet_catalog`, `petplanet_order`, `petplanet_inventory`, `petplanet_payment`, `petplanet_notification`, `petplanet_shipping`, `petplanet_delivery`, `petplanet_fulfillment`, `petplanet_user`) initialized via `infrastructure/postgres/init/01-create-catalog-database.sh`.
+- Flyway manages all schema migrations (`classpath:db/migration`), and all services run with `spring.jpa.hibernate.ddl-auto: validate`.
+- **Timestamp standardization**: All timestamp columns across all nine databases use `TIMESTAMPTZ` to align with `java.time.Instant` in Hibernate 6.
+- **Seed data migrations**:
+  - `user-service` (`V2__seed_users.sql`): Seeds the default admin and regular-user accounts with password `password123`; `V3__integer_user_ids_and_account_status.sql` migrates the regular account role from `CUSTOMER` to `USER`.
+  - `pet-catalog-service` (`V2__seed_pets.sql`): Seeds 6 sample pets (`11111111-1111-1111-1111-111111111101` .. `106`) with `AVAILABLE` status.
+  - `inventory-service` (`V3__seed_inventory.sql`): Seeds the matching 6 `pet_inventory` rows with `AVAILABLE` status.
 
-Notation: `PK` primary key; `FK` foreign key; `UQ` unique; `NN` not null. A default is shown only when migration SQL declares it. Table names repeat in distinct service databases (for example `processed_events`).
+## Key schema additions
 
-## Catalog database (`pet-catalog-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `pets` | `id UUID PK`; `name VARCHAR(120) NN`; `species VARCHAR(20) NN`; `breed VARCHAR(120) NN`; `age INTEGER NN`; `gender VARCHAR(20) NN`; `price NUMERIC(12,2) NN`; `description VARCHAR(2000) NN`; `availability_status VARCHAR(20) NN`; `created_at TIMESTAMPTZ NN`; `updated_at TIMESTAMPTZ NN`; `version BIGINT NN DEFAULT 0` | Checks `age >= 0`, `price > 0`; indexes `species`, `LOWER(breed)`, `price`, `availability_status`. |
-
-## Order database (`order-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `orders` | `id BIGSERIAL PK`; `customer_id BIGINT NN`; `status VARCHAR(32) NN`; `total_amount NUMERIC(19,2) NN`; `created_at TIMESTAMPTZ NN`; `updated_at TIMESTAMPTZ NN`; `version BIGINT NN DEFAULT 0` | Indexes `customer_id`, `status`, `created_at`; no user FK. |
-| `order_items` | `id BIGSERIAL PK`; `order_id BIGINT NN FK -> orders.id`; `pet_id UUID NN`; `pet_name VARCHAR(255) NN`; `pet_species VARCHAR(32) NN`; `pet_breed VARCHAR(255) NN`; `unit_price NUMERIC(19,2) NN`; `quantity INTEGER NN`; `subtotal NUMERIC(19,2) NN` | Check `quantity = 1`; indexes `order_id`, `pet_id`; no catalog FK; descriptive data is snapshot. |
-| `order_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `order_id BIGINT` nullable; `correlation_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMPTZ NN`; `published_at TIMESTAMPTZ` nullable | Indexes `order_id`, `created_at`; no order FK. |
-
-## Inventory database (`inventory-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `pet_inventory` | `id UUID PK`; `pet_id UUID NN UQ`; `status VARCHAR(20) NN`; `reservation_id UUID` nullable; `reserved_at TIMESTAMP` nullable; `reservation_expires_at TIMESTAMP` nullable; `sold_at TIMESTAMP` nullable; `version BIGINT NN DEFAULT 0`; `created_at TIMESTAMP NN`; `updated_at TIMESTAMP NN` | One row per pet; no catalog FK. |
-| `processed_events` | `event_id UUID PK`; `processed_at TIMESTAMP NN` | Event idempotency. |
-| `inventory_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `pet_id UUID` nullable; `order_id BIGINT` nullable; `correlation_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMP NN`; `published_at TIMESTAMP` nullable | No migration indexes besides PK/UQ. |
-
-## Payment database (`payment-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `payments` | `id BIGSERIAL PK`; `payment_id UUID NN UQ`; `order_id BIGINT NN UQ`; `amount NUMERIC(19,2) NN`; `currency VARCHAR(10) NN`; `status VARCHAR(20) NN`; `transaction_reference VARCHAR(255)` nullable; `created_at TIMESTAMP NN`; `updated_at TIMESTAMP NN`; `version BIGINT NN DEFAULT 0` | One payment per order; no order FK. |
-| `processed_events` | `event_id UUID PK`; `processed_at TIMESTAMP NN` | Event idempotency. |
-| `payment_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `order_id BIGINT` nullable; `payment_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMP NN`; `published_at TIMESTAMP` nullable | Payment result outbox. |
-
-## Notification database (`notification-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `notifications` | `id UUID PK`; `order_id BIGINT NN`; `customer_id BIGINT NN`; `message TEXT NN`; `status VARCHAR(32) NN`; `created_at TIMESTAMPTZ NN`; `sent_at TIMESTAMPTZ` nullable | Indexes `order_id`, `customer_id`; no order/user FK. |
-| `processed_events` | `event_id UUID PK`; `processed_at TIMESTAMPTZ NN` | Event idempotency. |
-| `notification_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `order_id BIGINT` nullable; `correlation_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMPTZ NN`; `published_at TIMESTAMPTZ` nullable | Indexes `order_id`, `created_at`. |
-
-## Shipping database (`shipping-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `shipments` | `id UUID PK`; `order_id BIGINT NN UQ`; `customer_id BIGINT NN`; `status VARCHAR(32) NN`; `tracking_number VARCHAR(64) NN UQ`; `created_at TIMESTAMPTZ NN`; `shipped_at TIMESTAMPTZ` nullable; `delivered_at TIMESTAMPTZ` nullable | Indexes `customer_id`, `status`; no order/customer FK. |
-| `processed_events` | `event_id UUID PK`; `processed_at TIMESTAMPTZ NN` | Event idempotency. |
-| `shipment_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `order_id BIGINT` nullable; `correlation_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMPTZ NN`; `published_at TIMESTAMPTZ` nullable | Indexes `order_id`, `created_at`. |
-
-## Delivery database (`delivery-tracking-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `delivery_records` | `id UUID PK`; `order_id BIGINT NN UQ`; `customer_id BIGINT NN`; `tracking_number VARCHAR(128) NN`; `status VARCHAR(32) NN`; `created_at TIMESTAMPTZ NN`; `updated_at TIMESTAMPTZ NN`; `delivered_at TIMESTAMPTZ` nullable | Indexes `customer_id`, `status`; no shipment/order FK. |
-| `processed_events` | `event_id UUID PK`; `processed_at TIMESTAMP NN` | Event idempotency. |
-| `delivery_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `order_id BIGINT` nullable; `correlation_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMP NN`; `published_at TIMESTAMP` nullable | Indexes `order_id`, `created_at`. |
-
-## Fulfillment database (`fulfillment-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `fulfillment_records` | `id UUID PK`; `order_id BIGINT NN UQ`; `customer_id BIGINT NN`; `tracking_number VARCHAR(128) NN`; `status VARCHAR(32) NN`; `last_updated_at TIMESTAMPTZ NN`; `notes TEXT NN` | Indexes `customer_id`, `status`; no delivery/order FK. |
-| `processed_events` | `event_id UUID PK`; `processed_at TIMESTAMPTZ NN` | Event idempotency. |
-| `fulfillment_outbox` | `id UUID PK`; `event_id UUID NN UQ`; `topic VARCHAR(255) NN`; `event_type VARCHAR(255) NN`; `order_id BIGINT` nullable; `correlation_id UUID` nullable; `payload TEXT NN`; `created_at TIMESTAMPTZ NN`; `published_at TIMESTAMPTZ` nullable | Indexes `order_id`, `created_at`. |
-
-## User database (`user-service`)
-
-| Table | Columns and constraints | Additional constraints/indexes; purpose |
-|---|---|---|
-| `users` | `id UUID PK`; `email VARCHAR(255) NN UQ`; `password_hash VARCHAR(255) NN`; `first_name VARCHAR(100) NN`; `last_name VARCHAR(100) NN`; `role VARCHAR(50) NN`; `created_at TIMESTAMP NN`; `updated_at TIMESTAMP NN` | User account/auth data; no order/customer FK. |
-
-## Entity relationships and persistence behavior
-
-- The physical `orders` to `order_items` relationship is one-to-many through `order_items.order_id`. The `Order` entity maps one-to-many with cascade all and orphan removal; `OrderItem.order` is lazy many-to-one.
-- No other JPA relationships between service entities were found. Event-carried IDs are plain columns, not cross-database FKs.
-- Pet and most projection IDs use UUIDs; order and payment internal IDs are identity-generated numeric values; user ID is UUID.
-- Entity enums use string persistence where annotated. SQL migration columns are varchar and do not constrain values to enum members.
-- Version columns exist for pets, orders, inventory, and payments. Inventory uses optimistic locking in reservation logic.
-- Timestamp values are maintained by entity callbacks or explicit application logic, not database triggers. Migrations use a mix of `TIMESTAMPTZ` and timezone-less `TIMESTAMP`.
-- Important operations use `@Transactional`; reads are often read-only. Outbox rows are stored in the local transaction and Kafka sends are generally attempted after commit.
-- `published_at` exists on outbox tables, but no dispatcher/relay that retries and updates it was found.
-- `spring.jpa.open-in-view` is false in service configs.
-
-## Mermaid ER diagram
-
-Only the actual physical foreign key is shown. `processed_events` names are represented with service prefixes because each exists in its own service database. Cross-service IDs are not relationships in this diagram.
-
-```mermaid
-erDiagram
-  pets {
-    UUID id PK
-    VARCHAR name
-    VARCHAR species
-    VARCHAR breed
-    INTEGER age
-    VARCHAR gender
-    NUMERIC price
-    VARCHAR description
-    VARCHAR availability_status
-    TIMESTAMPTZ created_at
-    TIMESTAMPTZ updated_at
-    BIGINT version
-  }
-  orders {
-    BIGSERIAL id PK
-    BIGINT customer_id
-    VARCHAR status
-    NUMERIC total_amount
-    TIMESTAMPTZ created_at
-    TIMESTAMPTZ updated_at
-    BIGINT version
-  }
-  order_items {
-    BIGSERIAL id PK
-    BIGINT order_id FK
-    UUID pet_id
-    VARCHAR pet_name
-    VARCHAR pet_species
-    VARCHAR pet_breed
-    NUMERIC unit_price
-    INTEGER quantity
-    NUMERIC subtotal
-  }
-  order_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    VARCHAR event_type
-    BIGINT order_id
-    UUID correlation_id
-    TEXT payload
-  }
-  orders ||--|{ order_items : "order_id"
-  pet_inventory {
-    UUID id PK
-    UUID pet_id UK
-    VARCHAR status
-    UUID reservation_id
-    TIMESTAMP reserved_at
-    TIMESTAMP reservation_expires_at
-    TIMESTAMP sold_at
-    BIGINT version
-  }
-  inventory_processed_events {
-    UUID event_id PK
-    TIMESTAMP processed_at
-  }
-  inventory_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    TEXT payload
-  }
-  payments {
-    BIGSERIAL id PK
-    UUID payment_id UK
-    BIGINT order_id UK
-    NUMERIC amount
-    VARCHAR currency
-    VARCHAR status
-  }
-  payment_processed_events {
-    UUID event_id PK
-    TIMESTAMP processed_at
-  }
-  payment_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    TEXT payload
-  }
-  notifications {
-    UUID id PK
-    BIGINT order_id
-    BIGINT customer_id
-    TEXT message
-    VARCHAR status
-  }
-  notification_processed_events {
-    UUID event_id PK
-    TIMESTAMPTZ processed_at
-  }
-  notification_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    TEXT payload
-  }
-  shipments {
-    UUID id PK
-    BIGINT order_id UK
-    BIGINT customer_id
-    VARCHAR status
-    VARCHAR tracking_number UK
-  }
-  shipping_processed_events {
-    UUID event_id PK
-    TIMESTAMPTZ processed_at
-  }
-  shipment_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    TEXT payload
-  }
-  delivery_records {
-    UUID id PK
-    BIGINT order_id UK
-    BIGINT customer_id
-    VARCHAR tracking_number
-    VARCHAR status
-  }
-  delivery_processed_events {
-    UUID event_id PK
-    TIMESTAMP processed_at
-  }
-  delivery_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    TEXT payload
-  }
-  fulfillment_records {
-    UUID id PK
-    BIGINT order_id UK
-    BIGINT customer_id
-    VARCHAR tracking_number
-    VARCHAR status
-    TIMESTAMPTZ last_updated_at
-    TEXT notes
-  }
-  fulfillment_processed_events {
-    UUID event_id PK
-    TIMESTAMPTZ processed_at
-  }
-  fulfillment_outbox {
-    UUID id PK
-    UUID event_id UK
-    VARCHAR topic
-    TEXT payload
-  }
-  users {
-    UUID id PK
-    VARCHAR email UK
-    VARCHAR password_hash
-    VARCHAR first_name
-    VARCHAR last_name
-    VARCHAR role
-    TIMESTAMP created_at
-    TIMESTAMP updated_at
-  }
-```
-
-## Entity-to-migration cross-check and gaps
-
-The order/order-item FK and catalog/inventory/payment version columns align between the reviewed mappings and migrations. Entity relationships are otherwise service-local or absent. The catalog `Pet` entity relies on JPA naming/type conventions for columns such as `createdAt`/`availabilityStatus`; migration uses explicit snake-case columns. Other mappings use explicit column names in many cases, and some entities rely on conventions for straightforward names.
-
-The migrations and ORM declarations have not been run together against PostgreSQL. Potential timestamp mapping discrepancies need particular verification: several entities use Java `Instant` while migrations declare timezone-less `TIMESTAMP` (including user, payment, and inventory columns), while other migrations use `TIMESTAMPTZ`. Hibernate's effective mapping and schema-validation result were not checked, so this is a verification gap rather than a confirmed runtime mismatch. Hibernate UUID generation, default SQL naming behavior, and every inferred physical column type also remain unverified at runtime. Use migration definitions—not assumptions from JPA annotations—for physical schema claims.
+- `pet_inventory` (in `inventory-service` `V1__init_inventory.sql`) includes `order_id BIGINT` (indexed via `idx_pet_inventory_order_id`) so reservations are linked to their originating order for compensating rollbacks on payment failure, order cancellation, or reservation expiry.
+- Seven outbox tables (`catalog_outbox`, `order_outbox`, `inventory_outbox`, `payment_outbox`, `notification_outbox`, `shipment_outbox`, `delivery_outbox`; `fulfillment_outbox` was dropped in Phase 4) are read by the shared `platform-commons` outbox relay. `published_at TIMESTAMPTZ` is set only after the broker acknowledges the send. Phase 1 migrations added `message_key VARCHAR(255)` (Kafka key chosen by the publisher), `attempts INTEGER NOT NULL DEFAULT 0` and `last_error TEXT` (relay failure tracking), plus a partial index on `created_at WHERE published_at IS NULL`:
+  - `order-service` `V3__outbox_relay_columns.sql`; `inventory-service` `V4__outbox_relay_columns.sql`;
+  - `payment-service` `V2__outbox_relay_columns.sql`, which also adds `correlation_id UUID`;
+  - `notification-service`, `shipping-service`, `delivery-tracking-service` and `fulfillment-service`: `V2__outbox_relay_columns.sql` each;
+  - `pet-catalog-service` `V3__catalog_outbox.sql` creates `catalog_outbox` (`id`, `event_id` unique, `topic`, `event_type`, `pet_id`, `correlation_id`, `message_key`, `payload`, `created_at`, `published_at`, `attempts`, `last_error`).
+- `processed_events (event_id UUID PK, processed_at)` in inventory, payment, notification, shipping and delivery-tracking (fulfillment's was dropped in Phase 4) is written with `INSERT … ON CONFLICT (event_id) DO NOTHING` (`ProcessedEventRepository.markProcessed`) inside the consumer's transaction.
+- `user-service` `V4__fix_seed_account_passwords.sql` replaces the broken V2 seed hash with a verified hash of `password123`.
+- Phase 2 (saga correctness):
+  - `order-service` `V4__confirmed_replaces_paid.sql`: `PAID` was removed from the order lifecycle, so existing `PAID` orders become `CONFIRMED`. Statuses are `CREATED`, `PAYMENT_PENDING`, `CONFIRMED`, `CANCELLED`, `FAILED`.
+  - `payment-service` `V3__refunds_and_closed_orders.sql`: adds `payments.refunded_at TIMESTAMPTZ` and `payments.refund_reason VARCHAR(64)` (status `REFUNDED`). New table `closed_orders (order_id BIGINT PK, reason VARCHAR(64) NOT NULL, closed_at TIMESTAMPTZ NOT NULL)` marks cancelled/failed orders so they are never charged later.
+  - `payment-service` `V4__payment_customer_id.sql` (Phase 3, R-SEC-04): adds nullable `payments.customer_id BIGINT` plus index `idx_payments_customer_id`. Filled from `PetReservedEvent.customerId`; payments created before V4 keep `NULL` (visible to admins only).
+  - No migration was needed for the new `RETIRED` status (`pet_inventory.status`, `pets.availability_status` are `VARCHAR(20)`).
+- Phase 4 (downstream boundaries):
+  - `delivery-tracking-service` `V3__delivery_status_timeline.sql`: legacy status `FAILED` → `DELIVERY_FAILED`; check constraint `chk_delivery_records_status` (`IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`); new nullable `delivery_records.correlation_id UUID` (saga correlation reused for admin status events). New table `delivery_events (id UUID PK, delivery_id UUID NOT NULL FK → delivery_records, order_id BIGINT NOT NULL, status VARCHAR(32) NOT NULL, note VARCHAR(500), occurred_at TIMESTAMPTZ NOT NULL)` with index `(order_id, occurred_at)`; existing deliveries were back-filled with an `IN_TRANSIT` row (and a row for their current status if different).
+  - `shipping-service` `V3__shipment_status_mirror.sql`: unused `PENDING`/`PACKAGED` mapped to `CREATED`; check constraint `chk_shipments_status` (`CREATED`, `SHIPPED`, `DELIVERED`, `DELIVERY_FAILED`). Existing `SHIPPED`/`DELIVERED` rows are unchanged.
+  - `notification-service` `V3__typed_notifications.sql`: `notifications.type VARCHAR(32) NOT NULL` (existing rows set to `ORDER_CONFIRMED`), check constraint `chk_notifications_type` (8 types), unique index `uq_notifications_order_type (order_id, type)`.
+  - `fulfillment-service` `V3__order_tracking_projection.sql`: **drops** `fulfillment_records`, `fulfillment_outbox` and `processed_events`, and creates `order_tracking (order_id BIGINT PK, customer_id BIGINT, order_status, order_status_at TIMESTAMPTZ, total_amount NUMERIC(12,2), payment_status, shipment_status, tracking_number VARCHAR(128), delivery_status, escalated BOOLEAN NOT NULL DEFAULT FALSE, escalation_reason VARCHAR(64), created_at, updated_at TIMESTAMPTZ NOT NULL)` with indexes on `(customer_id, updated_at DESC)` and a partial `(order_status, order_status_at) WHERE escalated = FALSE`, plus `order_tracking_events (event_id UUID PK, order_id BIGINT NOT NULL, event_type VARCHAR(64), source VARCHAR(64), description TEXT, occurred_at, recorded_at TIMESTAMPTZ NOT NULL)` with index `(order_id, occurred_at)`. Status columns are `VARCHAR(32)` holding enum names. No data is copied: the projection is rebuilt by replaying Kafka (see [fulfillment-service](./backend/fulfillment-service.md)).
+- `user-service` migration `V3` replaces the UUID `users.id` primary key with an auto-generated `INTEGER` identity column and adds `active BOOLEAN NOT NULL DEFAULT TRUE` for soft deactivation. Password hashes remain private to the user service and are never included in API responses.
+- Order/event/customer projections continue to store `customerId` as `BIGINT`, but new values are the actual generated user ID widened to `Long`; the previous email-hash-derived values are no longer produced. Existing local orders cannot be reliably mapped from their old hashes to user accounts; use a fresh local database volume if old order data must be cleared.

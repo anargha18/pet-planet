@@ -1,0 +1,1 @@
+{"eventId":"7455a895-41d5-451b-84a8-84cecf3f795a","eventType":"PaymentSucceededEvent","eventVersion":1,"aggregateId":"233191a6-2089-40f1-a6a4-c6026c7ece31","timestamp":"2026-11-14T06:59:59.734124800Z","correlationId":"2f8300c1-40f8-4236-bceb-4a92ef886d9f","orderId":2,"paymentId":"024d5200-5eb5-42b9-8903-3a3a14c24bcd","amount":950.00}

@@ -19,17 +19,20 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
 import { Link, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
+import { useAuth } from '../features/auth';
+import { useCart } from '../features/cart';
 
-const navItems = [
+/** Navigation adapts to the signed-in role (R-FE-02): guests browse, users also see orders and profile, admins the admin area. */
+const navItemsFor = (auth, isAdmin) => [
   { label: 'Home', path: '/' },
   { label: 'Browse Pets', path: '/pets' },
-  { label: 'Cart', path: '/cart' },
+  ...(auth ? [{ label: 'Orders', path: '/orders' }, { label: 'Profile', path: '/profile' }] : []),
+  ...(isAdmin ? [{ label: 'Admin', path: '/admin' }] : []),
 ];
 
 function Layout() {
-  const { auth, logout } = useAuth();
+  const { auth, isAdmin, logout } = useAuth();
+  const navItems = navItemsFor(auth, isAdmin);
   const { cartCount } = useCart();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -102,7 +105,7 @@ function Layout() {
               {auth ? (
                 <>
                   <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                    {auth.user?.email || 'Pet lover'}
+                    {auth.email || 'Pet lover'}
                   </Typography>
                   <Button variant="outlined" onClick={logout}>
                     Logout
@@ -146,9 +149,9 @@ function Layout() {
             {auth ? (
               <>
                 <Typography variant="body2" sx={{ px: 2, py: 1, color: 'text.secondary' }}>
-                  {auth.user?.email || 'Pet lover'}
+                  {auth.email || 'Pet lover'}
                 </Typography>
-                <Button variant="outlined" onClick={logout} sx={{ mx: 2 }}>
+                <Button variant="outlined" onClick={() => { setDrawerOpen(false); logout(); }} sx={{ mx: 2 }}>
                   Logout
                 </Button>
               </>
@@ -182,10 +185,11 @@ function Layout() {
               </Typography>
             </Box>
             <Stack direction="row" spacing={3} flexWrap="wrap">
-              <Button component={Link} to="/" color="inherit">Home</Button>
-              <Button component={Link} to="/pets" color="inherit">Browse Pets</Button>
-              <Button component={Link} to="/login" color="inherit">Login</Button>
-              <Button component={Link} to="/register" color="inherit">Register</Button>
+              {navItems.map((item) => (
+                <Button key={item.path} component={Link} to={item.path} color="inherit">{item.label}</Button>
+              ))}
+              {!auth && <Button component={Link} to="/login" color="inherit">Login</Button>}
+              {!auth && <Button component={Link} to="/register" color="inherit">Register</Button>}
             </Stack>
           </Stack>
         </Container>

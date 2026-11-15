@@ -6,14 +6,14 @@ CREATE TABLE IF NOT EXISTS payments (
     currency VARCHAR(10) NOT NULL,
     status VARCHAR(20) NOT NULL,
     transaction_reference VARCHAR(255),
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     version BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS processed_events (
     event_id UUID PRIMARY KEY,
-    processed_at TIMESTAMP NOT NULL
+    processed_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS payment_outbox (
@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS payment_outbox (
     order_id BIGINT,
     payment_id UUID,
     payload TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    published_at TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL,
+    published_at TIMESTAMPTZ
 );
+
+CREATE INDEX IF NOT EXISTS idx_payment_outbox_created_at ON payment_outbox(created_at);
