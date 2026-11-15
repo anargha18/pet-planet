@@ -2,54 +2,51 @@
 
 ## Stack and structure
 
-- React and React DOM 18.3.1, JavaScript/JSX, React Router 6.28.0, Vite 5.4.10, `@vitejs/plugin-react` 4.3.2.
-- UI: Material UI 5.16.x, MUI icons, Emotion 11.11.x. HTTP: Axios 1.7.x.
-- The app lives in `frontend/`: `frontend/index.html` and `frontend/src/main.jsx` bootstrap it; `frontend/src/App.jsx` defines routes; `frontend/src/components/Layout.jsx` provides navigation/layout; `frontend/src/pages/` contains screen components; `frontend/src/context/` contains auth/cart state; `frontend/src/services/api.js` owns API calls; `frontend/src/theme/theme.js` and `frontend/src/index.css` define styles.
-- Version numbers come from declared package ranges; lockfile is present, but installed dependency versions were not verified.
+- React 18.3.1, React Router 6.28.0, Vite 5.4.10, Material UI 5.16.x, Axios 1.7.x. No frontend test framework yet.
+- All API requests target `VITE_API_GATEWAY_URL` (default `http://localhost:8089`).
+- Source is grouped by feature: `app/` (router, providers, routes, route guards), `api/` (backend calls behind `api/index.js`), `features/{auth,catalog,cart,checkout,orders,profile,admin}` (each with a public `index.js`), shared `components/` and `theme/`. Boundary rules are checked by `npm run check:boundaries`; see [Code structure](./code-structure.md#frontend-frontendsrc).
+- The Compose `frontend` service runs the Vite dev server (R-FE-06: kept for learning). The image copies the source, so `docker compose up -d --build frontend` is needed after a change. No production `nginx` stage exists; R-FE-06 makes it optional.
 
-## Routes and pages
+## HTTP client and session (R-FE-01)
 
-| Route | Page / behavior |
-|---|---|
-| `/` | Home, featured pets from catalog and species category links |
-| `/pets` | Paged catalog, species filter, name search on currently loaded page, local price sorting |
-| `/pets/:id` | Pet detail and add-to-cart |
-| `/login` | Login form |
-| `/register` | Registration form |
-| `/cart` | Browser-local cart and subtotal |
-| `/checkout` | Submits order to order-service |
-| `*` | Renders home page |
+- **One axios instance** (`api/client.js`) for every call. A request interceptor attaches the bearer token, which the auth layer hands over with `setAccessToken`, so API functions never take a token argument.
+- A response interceptor reacts to a **401 on a request that carried a token** (expired, revoked or forged): `AuthProvider` clears the session and redirects to `/login?expired=1&next=<current path>`. The login page then says "Your session has expired" and returns to `next` after sign-in. Only same-app paths are followed.
+- `AuthProvider` also reads the JWT's `exp` claim (it does not verify the token; the backend does). A stored token that is already expired is dropped on load, and a timer ends the session when `exp` passes while the app is open.
+- The session (`{ token, id, email, role }`, from the login/register `AuthResponse`) is kept in `localStorage` under `pet-planet-auth`. The cart is kept in `localStorage` under `pet-planet-cart`.
+- Errors are shown with the backend's `message` from the shared error body (`extractApiError`). Loading, error and empty states are distinct components (`components/PageState`). A 404 from the tracking view right after checkout is shown as "not available yet", not as an error (R-FE-05).
 
-## APIs and configuration
+## Routes and access (R-FE-02)
 
-`src/services/api.js` creates three Axios instances (catalog/order/user), each with 20-second timeout. Base URLs come from:
+| Route | Access | Page / behavior |
+|---|---|---|
+| `/` | public | `HomePage`: featured pets and species cards. |
+| `/pets` | public | `PetsPage`: paged catalog, species filter from `?species=`, name search, price sort. |
+| `/pets/:id` | public | `PetDetailPage`: details, availability, add to cart. |
+| `/login`, `/register` | public | Sign-in (shows the expired-session and "please sign in" notices) and registration with auto-login. |
+| `/cart` | public | Browser-local cart. |
+| `/checkout` | signed in (`ProtectedRoute`) | Shows that payment is simulated (DEC-4), submits `POST /api/v1/orders`, clears the cart and opens the new order's page. |
+| `/orders` | signed in | `OrdersPage`: the user's orders (`GET /api/v1/orders`) with order, payment and delivery status from **one** call to the tracking projection (`GET /api/v1/fulfillment/orders/me`), and an escalation marker. |
+| `/orders/:orderId` | signed in (owner, or any order for an admin) | `OrderDetailPage`: items, status card (order, simulated payment, shipment, delivery, tracking number), **timeline** from `GET /api/v1/fulfillment/orders/{id}`, all notifications (`GET /api/v1/notifications/order/{id}`), cancel button while `CREATED`/`PAYMENT_PENDING`. It **polls every 2 s** while the order is open or a confirmed order has not reached shipping yet, for at most 60 s, then asks the user to refresh (R-FE-03). |
+| `/profile` | signed in | `ProfilePage`: view and edit name and email (`GET`/`PATCH /api/v1/users/me`), change password (`PUT /api/v1/users/me/password`). |
+| `/admin` | `ADMIN` (`AdminRoute`; others see "Admins only") | Links to the admin pages. |
+| `/admin/pets` | `ADMIN` | Catalog list with an availability filter (including archived `RETIRED`), create/edit dialog (no availability field), archive (409 messages shown). |
+| `/admin/inventory` | `ADMIN` | Read-only inventory (`GET /api/v1/inventory/pets?status=`): status, order, reservation and expiry times, sale time. Pet names come from the catalog (best effort). |
+| `/admin/orders` | `ADMIN` | All orders with status and customer filters; details open `/orders/:id`. |
+| `/admin/users` | `ADMIN` | Paged users, create dialog (any role), role change, deactivate/reactivate (the last-admin 409 is shown). |
+| `/admin/deliveries` | `ADMIN` | Orders that reached shipping (tracking projection, 50 per page, optional "escalated only"), with buttons for the allowed next delivery statuses (`PUT /api/v1/deliveries/order/{id}/status`; a failure note can be entered). |
 
-- `VITE_PET_CATALOG_URL` (fallback `http://localhost:8080`)
-- `VITE_ORDER_URL` (fallback `http://localhost:8081`)
-- `VITE_USER_URL` (fallback `http://localhost:8088`)
+The navigation adapts to the role: guests see Home and Browse Pets; signed-in users also see Orders and Profile; admins also see Admin. The backend enforces every rule independently; the route guards only avoid showing pages that would fail.
 
-The service exports pet listing/detail, auth register/login, current profile, and order creation helpers. Authorization headers include a bearer token when available. Error parsing checks common API error/message/details fields and otherwise uses the thrown error message.
+## Verification
 
-## State, forms, and UI
-
-- `AuthContext` persists the auth object under local-storage key `pet-planet-auth`; logout clears it. `refreshProfile` calls `/api/v1/users/me`; on request failure it clears local auth state. No route guard or role-based UI is present.
-- `CartContext` persists `pet-planet-cart`, allows one entry per pet ID, calculates subtotal from stored prices, and clears/removes entries locally. No backend cart exists.
-- Login/register/checkout forms use Material UI fields and client state. Login and register disable native validation with `noValidate`; server-side bean validation is relied on. Checkout includes an editable `customerId`.
-- Material UI theme and global styles set palette, typography, cards, buttons, and responsive layouts.
-- Catalog pages expose loading/error/empty states; auth and checkout expose error/submission states.
-
-## Integration status and limitations
-
-| Feature | UI integration |
-|---|---|
-| Catalog | Connected to catalog listing and detail APIs. |
-| Registration/login | Connected to user-service. Registration ignores returned token and navigates to login. Login stores token/role/email. |
-| Cart | Local browser storage only. No server API. |
-| Checkout/order | Calls `POST /api/v1/orders`; success response is shown and local cart is cleared. |
-| Profile | Checkout fetches current user ID if token is present. |
-| Inventory/payment/notification/shipping/delivery/fulfillment | No frontend API use found. |
-| Order history/tracking/admin | No UI found. |
-
-Important mismatches: user profile ID is UUID, while order `customerId` expects a number; checkout converts the UUID to `Number`, which is not a valid identity mapping. Catalog response has no image property, although pages check `pet.image` and use Unsplash fallback images. Catalog search for name is client-side over the current page; no backend name query parameter exists. Home category links include `?species=...`, but the pets page does not read that query parameter, so those links do not initialize the species filter.
-
-No frontend test or lint script is defined in `package.json`. See [implementation-status.md](./implementation-status.md) for overall status and [api-reference.md](./api-reference.md) for backend contracts.
+- `npm run build` and `npm run check:boundaries` pass.
+- `make ui-check` (`frontend/scripts/ui-check.mjs`, see [Testing](./testing.md#ui-walkthrough-make-ui-check)) passed 29/29 checks on 2026-11-15, with no JavaScript errors in the console: on the long-running stack and twice on a fresh clean checkout. It covers:
+  - guest redirects and navigation;
+  - customer login with return to the requested page;
+  - "Admins only" for a customer;
+  - profile;
+  - add to cart → checkout (simulated-payment notice) → order page polling to `Confirmed`, with the shipment in the timeline and a notification;
+  - a forged token → `/login?expired=1` with the session cleared;
+  - an already-expired token dropped on load;
+  - every admin page rendering;
+  - an admin "Delivered" action reflected on the order page.

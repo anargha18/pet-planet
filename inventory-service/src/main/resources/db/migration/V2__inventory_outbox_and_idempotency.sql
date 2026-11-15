@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS processed_events (
     event_id UUID PRIMARY KEY,
-    processed_at TIMESTAMP NOT NULL
+    processed_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS inventory_outbox (
@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS inventory_outbox (
     order_id BIGINT,
     correlation_id UUID,
     payload TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    published_at TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL,
+    published_at TIMESTAMPTZ
 );
+
+CREATE INDEX IF NOT EXISTS idx_inventory_outbox_created_at ON inventory_outbox(created_at);

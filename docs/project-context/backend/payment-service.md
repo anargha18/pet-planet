@@ -1,19 +1,11 @@
 # Payment service
 
-**Module:** `payment-service` · **Package root:** `com.petcommerce.payment` · **Database:** `petplanet_payment` (configured name; live database not inspected) · **Port:** 8083 by default.
+**Module:** `payment-service` · **Package root:** `com.petcommerce.payment` · **Database:** `petplanet_payment` · **Port:** 8083.
 
-## Responsibilities and structure
-
-- `consumer/PaymentEventConsumer`: listens to `pet-reserved-events`.
-- `service/PaymentService`: idempotency, simulated outcome, persistence, result event creation.
-- `entity/Payment`, `PaymentStatus`, `ProcessedEvent`, `PaymentOutboxEvent`.
-- Repositories persist payments, processed event IDs, and outbox entries.
-- `config/KafkaConfig`: declares reservation and payment result topics.
-- `event`: reservation and payment success/failure records.
-
-## Behavior and limits
-
-Payment is a simulation, not an external processor. It stores one payment per order, uses a fixed amount and USD currency, generates a synthetic transaction reference, and selects success/failure from `PAYMENT_SIMULATION_RESULT`. It emits `payment-succeeded-events` or `payment-failed-events`; order-service consumes them.
-
-There is no REST controller, payment provider integration, or customer payment credential handling. Payment API surface is therefore event-only. See [database.md](../database.md), [architecture.md](../architecture.md), and [implementation-status.md](../implementation-status.md).
-
+- `pet-reserved-events`: charges the order's `totalAmount` through `application/PaymentGateway`. A missing or non-positive amount is rejected, so the event is retried and then dead-lettered; there is no fallback amount. Emits `PaymentSucceededEvent` or `PaymentFailedEvent`.
+- `order-cancelled-events` and `order-failed-events`: records the order in `closed_orders` and refunds a `SUCCEEDED` payment (`REFUNDED`, `refunded_at`, `refund_reason`, then `PaymentRefundedEvent` on `payment-refunded-events`). A `PetReserved` handled after the order is closed is never charged.
+- Since Phase 4, `PaymentSucceededEvent`, `PaymentFailedEvent` and `PaymentRefundedEvent` also carry the order's `customerId` (additive; `null` for payments created before `V4`). notification and fulfillment use it.
+- A charge and the closing of the same order are serialized with a PostgreSQL advisory lock (`PaymentRepository.lockOrder`, `pg_advisory_xact_lock`): whichever runs second sees the other's result.
+- `client/SimulatedPaymentGateway` (DEC-4, no real money): `PAYMENT_SIMULATION_RESULT` = `SUCCESS` (default) or `FAILURE`; `PAYMENT_SIMULATION_DELAY` (ISO-8601, default `PT0S`) makes charges slow, so the smoke test can reproduce cancel/expiry races.
+- Events go through `payment_outbox`, published by the shared `platform-commons` relay.
+- Exposes `GET /api/v1/payments/order/{orderId}` via `PaymentController`, returning `PaymentResponse` (never the entity). Requires a valid JWT; `PaymentService.getForOrder` allows only the order's owner (`payments.customer_id`, from `PetReservedEvent.customerId`, migration `V4`) or an admin (403 otherwise, 404 if no payment). Payments created before V4 have no owner and are admin-only.

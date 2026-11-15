@@ -25,3 +25,11 @@ Before completing the task:
 - Explicitly mention any details that could not be verified.
 
 The source code and database migrations remain the primary evidence of implementation. Avoid conflicting duplicate AI instructions; update this file rather than creating a second project-specific instruction source.
+
+## Code structure rules
+
+Follow the package and folder layout in [`docs/project-context/code-structure.md`](docs/project-context/code-structure.md): keep services at the repository root, put each class in the package that matches its job, and keep `./mvnw test` (ArchUnit `ArchitectureTest`) and `npm run check:boundaries` passing. Never edit an already-applied Flyway migration; add a new version instead.
+
+## Session memory
+
+Restructuring progress, confirmed decisions, the verified architecture summary and open issues are kept in `memory/` (`NOW.md` first). Read it before starting work, and update it after each meaningful task. See `CLAUDE.md` for the protocol.

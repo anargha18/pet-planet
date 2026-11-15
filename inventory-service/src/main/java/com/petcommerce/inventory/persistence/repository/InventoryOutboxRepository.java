@@ -1,0 +1,18 @@
+package com.petcommerce.inventory.persistence.repository;
+
+import com.petcommerce.inventory.persistence.entity.InventoryOutboxEvent;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface InventoryOutboxRepository extends JpaRepository<InventoryOutboxEvent, UUID> {
+    /** Oldest unpublished rows, locked for the relay transaction; rows locked by another relay run are skipped. */
+    @Query(value = "SELECT * FROM inventory_outbox WHERE published_at IS NULL ORDER BY created_at "
+            + "LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
+    List<InventoryOutboxEvent> lockUnpublishedBatch(@Param("limit") int limit);
+}

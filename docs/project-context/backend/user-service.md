@@ -1,20 +1,10 @@
 # User service
 
-**Module:** `user-service` · **Package root:** `com.petcommerce.user` · **Database:** `petplanet_user` (configured name; live database not inspected) · **Port:** 8088 by default.
+**Module:** `user-service` · **Package root:** `com.petcommerce.user` · **Database:** `petplanet_user` · **Internal port:** 8088 (not published by Compose).
 
-## Responsibilities and structure
-
-- `controller/AuthController`: registration, login, current profile, admin user lookup.
-- `service/UserService`: registration, password verification, user lookup, Spring `UserDetailsService`.
-- `entity/User`, `Role`; `repository/UserRepository`.
-- `security/JwtService`, `JwtAuthenticationFilter`.
-- `config/SecurityConfig`: stateless filter chain, CORS, public route allow-list, authentication provider, BCrypt encoder.
-- `dto/RegisterRequest`, `LoginRequest`, `AuthResponse`, `UserResponse`.
-- `exception/ApiExceptionHandler`: validation, argument/authentication, generic error responses.
-
-## Behavior and security
-
-Registration creates `CUSTOMER` users; passwords are BCrypt encoded. Login returns a signed bearer JWT with email subject and role claim. `/api/v1/users/me` requires authentication; `/api/v1/users/{id}` requires `ROLE_ADMIN`. Auth routes and docs/health/error paths are public according to SecurityConfig; unmatched requests require authentication. CORS allows one configured origin and selected methods/headers; CSRF is disabled; sessions are stateless.
-
-User IDs are UUIDs. The order API expects a numeric `Long` customer ID; no identity bridge exists. JWT validation/security is not configured in other services. Full details are in [security.md](../security.md), [api-reference.md](../api-reference.md), and [database.md](../database.md).
-
+- Owns user records with generated integer IDs, BCrypt password hashes, `USER`/`ADMIN` roles, account status, and profile timestamps.
+- **Issues access tokens.** `POST /api/v1/auth/register` and `POST /api/v1/auth/login` (`api/controller/AuthController` → `application/AuthService`) verify credentials and return an `AuthResponse` with an RS256 JWT signed by `security/token/TokenIssuer` (Spring Security `NimbusJwtEncoder`; claims `sub` = user ID, `email`, `role`, `iss`, `aud`, `iat`, `exp`; the public half of the key is derived from the private key). user-service is the only service holding `JWT_PRIVATE_KEY`. Profile and admin account management live in `application/UserService`.
+- Every request (including `/api/v1/auth/**`) must carry the gateway's `X-Internal-Service-Token` (`security/InternalServiceKeyFilter`). In addition, like every service, it validates the JWT itself (`security/SecurityConfig`, platform-commons resource server): `/api/v1/users/me/**` needs any valid token and uses the token's user ID (no identity headers are trusted); `/api/v1/users/**` needs `ADMIN`; login/registration are public.
+- User APIs support self profile lookup/edit and password change, plus admin paging, creation, lookup, partial update, and soft deactivation.
+- `V2__seed_users.sql` seeds the initial accounts; `V3__integer_user_ids_and_account_status.sql` converts IDs to an identity column, adds account status, and migrates `CUSTOMER` to `USER`; `V4__fix_seed_account_passwords.sql` replaces the V2 seed hash (which did not match the documented password) with a verified BCrypt hash of `password123`, checked by `SeedAccountPasswordTest`.
+- `USER_SERVICE_INTERNAL_TOKEN` must be shared only by the gateway and user service. Backend service ports are not published by the local Compose setup.

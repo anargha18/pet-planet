@@ -1,24 +1,12 @@
 # Inventory service
 
-**Module:** `inventory-service` · **Package root:** `com.petcommerce.inventory` · **Database:** `petplanet_inventory` (configured name; live database not inspected) · **Port:** 8082 by default.
+**Module:** `inventory-service` · **Package root:** `com.petcommerce.inventory` · **Database:** `petplanet_inventory` · **Port:** 8082.
 
-## Responsibilities and structure
-
-- `controller/InventoryController`: status, reserve, release, and sold operations.
-- `service/InventoryService`: reservation transitions, event handling, expiration scheduler.
-- `entity/PetInventory`, `InventoryStatus`, `ProcessedEvent`, `InventoryOutboxEvent`.
-- `repository/PetInventoryRepository`, `ProcessedEventRepository`, `InventoryOutboxRepository`.
-- `consumer/InventoryEventConsumer`: listens for order-created and order-confirmed events.
-- `event`: order-created/confirmed and reservation success/failure/released/expired records.
-- `config/KafkaConfig`: declares order-created, order-confirmed, and pet-reserved topics.
-
-## Behavior and persistence
-
-One inventory row represents one unique pet. A missing row is treated as available in code; inventory is not seeded/synchronized from catalog. Reservation sets `RESERVED`, a unique reservation ID, timestamps, and an expiry. A scheduled check reopens expired reservations. Confirmation marks known inventory sold. Optimistic `@Version` protects concurrent updates; `processed_events` supports event-idempotency.
-
-The controller's status read returns an `AVAILABLE` response for missing inventory without persisting it. Manual reserve generates a UUID; release and sold operations require an existing row. See [database.md](../database.md) for migration schema.
-
-## Messaging, transactions, gaps
-
-Consumes `order-created-events` and `order-confirmed-events`; emits `pet-reserved-events`, `pet-reservation-failed-events`, `pet-reservation-released-events`, and `pet-reservation-expired-events`. No order-created event producer or consumers for the failure/release/expiry topics were found. No Spring Security configuration is present. API details are in [api-reference.md](../api-reference.md).
-
+- **Source of truth for availability** of each unique pet: `AVAILABLE`, `RESERVED`, `SOLD`, `RETIRED`. Every change is mirrored to the catalog via `InventoryStatusChangedEvent` (`inventory-status-events`).
+- `order-created-events`: reserves **all** pets of the order or none (`@Version` optimistic locking), recording `order_id`, a reservation ID and an expiry time. Emits `PetReservedEvent` (with `totalAmount` and, since Phase 3, the order's `customerId`) or `PetReservationFailedEvent` (`PET_NOT_FOUND`, `PET_ALREADY_RESERVED`, `PET_ALREADY_SOLD`, `PET_RETIRED`). Unknown pets are never created implicitly.
+- `payment-succeeded-events`: completes the sale. Pets still `RESERVED` for that order become `SOLD`, then `PetsSoldEvent` (`pets-sold-events`). If none are still reserved (expired or released), nothing is sold and `InventorySaleConflictEvent` is emitted.
+- `order-cancelled-events` and `order-failed-events`: release the pets still `RESERVED` for that order (announced via `inventory-status-events`; `pet-reservation-released-events` was retired in Phase 4 because nothing consumed it). Pets sold or reserved by another order are untouched.
+- `pet-catalog-events`: `PetCreatedEvent` creates the inventory row; `PetArchivedEvent` retires an `AVAILABLE` pet.
+- `@Scheduled expireReservations()` (every `INVENTORY_EXPIRATION_CHECK_DELAY_MS`, default 30 s) releases reservations older than `INVENTORY_RESERVATION_TIMEOUT` (ISO-8601, default `PT5M`) and emits `PetReservationExpiredEvent`.
+- HTTP is read-only: `GET /api/v1/inventory/pets/{petId}` (admin; JWT validated by the shared platform-commons resource server). An unknown pet returns `404` (`PetInventoryNotFoundException`, shared `ApiError` body) instead of a made-up `AVAILABLE` record (changed in Phase 3). The former manual reserve/release/sold endpoints were removed (R-SAGA-07).
+- HTTP (admin only, read-only): `GET /api/v1/inventory/pets` (paged overview, optional `status`; added in Phase 5 for the admin UI) and `GET /api/v1/inventory/pets/{petId}`. Responses include `orderId` and `updatedAt`.

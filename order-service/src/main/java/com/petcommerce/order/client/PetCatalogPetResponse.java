@@ -1,6 +1,6 @@
 package com.petcommerce.order.client;
 
-import com.petcommerce.order.entity.Species;
+import com.petcommerce.order.domain.model.Species;
 
 import java.math.BigDecimal;
 import java.util.UUID;
