@@ -3,7 +3,13 @@ package com.petcommerce.inventory.api.controller;
 import com.petcommerce.inventory.api.dto.InventoryResponse;
 import com.petcommerce.inventory.api.mapper.InventoryMapper;
 import com.petcommerce.inventory.application.InventoryService;
+import com.petcommerce.inventory.domain.model.InventoryStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,6 +28,13 @@ public class InventoryController {
 
     public InventoryController(InventoryService inventoryService) {
         this.inventoryService = inventoryService;
+    }
+
+    /** Paged overview of every pet's availability, optionally filtered by {@code status}. */
+    @GetMapping("/pets")
+    public Page<InventoryResponse> list(@RequestParam(required = false) InventoryStatus status,
+            @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return inventoryService.listInventory(status, pageable).map(InventoryMapper::toResponse);
     }
 
     @GetMapping("/pets/{petId}")
