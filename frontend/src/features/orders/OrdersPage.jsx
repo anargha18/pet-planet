@@ -53,12 +53,14 @@ const getStatusColor = (status) => {
       return 'success';
     case 'PAYMENT_PENDING':
     case 'IN_TRANSIT':
+    case 'OUT_FOR_DELIVERY':
     case 'SHIPPED':
       return 'warning';
     case 'CREATED':
     case 'PACKAGED':
       return 'info';
     case 'FAILED':
+    case 'DELIVERY_FAILED':
       return 'error';
     case 'CANCELLED':
     default:
