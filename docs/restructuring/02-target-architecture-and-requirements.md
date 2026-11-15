@@ -484,6 +484,56 @@ Not done or not verified in Phase 3:
 - order-service does not yet use the HTTP correlation ID as the saga's `correlationId` (events still start a new one).
 - A one-off 688 s run of payment's `ArchitectureTest` during the full build could not be reproduced (0.8 s on rerun).
 
+**Phase 4: done (2026-11-15).**
+- R-SAGA-06 / R-SVC-02 (delivery-tracking):
+  - statuses `IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED / DELIVERY_FAILED`, enforced in `DeliveryRecord.advanceTo` (409 otherwise);
+  - `delivery_events` timeline;
+  - the single admin action `PUT /api/v1/deliveries/order/{orderId}/status`;
+  - the saga `correlationId` is stored per delivery and reused for admin events;
+  - `DeliveryStatusUpdatedEvent` gained `previousStatus` and `note`.
+  - Both `…/delivered` endpoints were removed (S9), and the gateway admin rule now covers `PUT /api/v1/deliveries/order/*/status`.
+- R-SVC-03 (shipping):
+  - creates `CREATED` shipments and mirrors `delivery-status-updated-events` (`SHIPPED`, `DELIVERED`, `DELIVERY_FAILED`; monotonic, idempotent);
+  - read-only API.
+- R-SAGA-09 (notification):
+  - typed notifications (one per order and type) from order confirmed/cancelled/failed, payment refunded, shipment created and delivery status events, with reason-specific wording (S12);
+  - list endpoints per order, per customer and `/me`;
+  - `NotificationSentEvent` gained `customerId` and `notificationType`.
+- DEC-2 / R-SVC-01 (fulfillment):
+  - rebuilt as the order-tracking projection: `order_tracking` + `order_tracking_events`, fed by 12 topics in the new consumer group `fulfillment-tracking-projection` (S10, S11);
+  - idempotency via the timeline's `event_id`, row lock per order, monotonic status rules;
+  - escalation on `DELIVERY_FAILED` and on orders stuck before confirmation (`FULFILLMENT_STUCK_AFTER`, default `PT10M`);
+  - API `GET /api/v1/fulfillment/orders/{orderId}`, `/orders/me`, `/orders?customerId=&escalated=` (admin);
+  - `V3` dropped `fulfillment_records`, `fulfillment_outbox` and `processed_events`.
+- R-EVT-06: `fulfillment-updated-events` and `pet-reservation-released-events` are retired (no longer produced or declared).
+- payment: `PaymentSucceeded/Failed/RefundedEvent` gained `customerId` (additive).
+- R-SVC-04 (order):
+  - the unauthenticated overloads `create(request)`, `cancel(id)`, `getOrder(id)` and `getOrders(…, pageable)` were removed;
+  - `PetCatalogClient` has connect/read timeouts (`PT2S`/`PT5S`) and maps 404 → not found, other 4xx/5xx/timeouts → 503.
+- R-SVC-05 (user): no change needed (done in Phase 0b/3).
+- Frontend (minimal, rest is Phase 5): `api/tracking.js` shows the latest entry of the notification list; two new status colours.
+
+Verified:
+- `./mvnw test` BUILD SUCCESS, all 11 modules, 329 tests. Frontend boundaries and build OK.
+- `make up` applied the new migrations on the existing data; all containers healthy. The projection replayed history and matched order-service (16 orders: 8 confirmed, 5 cancelled, 3 failed).
+- `make smoke` **74/74** on 2026-11-15, including the new admin delivery steps, delivery-failure scenario D, typed notifications and the tracking timeline for every path.
+- The only DLT record during the replay was the deliberate Phase 1 poison message (`{this is not json`).
+- Contract fixtures for `payment-failed`, `payment-refunded`, `notification-sent` and the new `delivery-status-updated` shape were captured from that run.
+
+Deviations:
+- Notification types `OUT_FOR_DELIVERY` and `DELIVERY_FAILED` were added beyond R-SAGA-09's six, because delivery-tracking can now report those statuses. `IN_TRANSIT` sends nothing (covered by `SHIPPED` on `ShipmentCreated`).
+- Fulfillment API paths are `/api/v1/fulfillment/orders/…` as in R-SVC-01. The admin list takes optional `customerId` and `escalated` filters and is paged. The single-order view nests `summary` + `timeline`.
+- `GET /notifications/order/{id}` returns `[]` (not 404) when an order has no notifications yet.
+- A missing `customerId` on a notification event is taken from an earlier notification of the same order before dead-lettering.
+- The projection's "stuck" escalation also covers `CREATED`, and it is cleared automatically when the order closes.
+- New consumers of existing topics (notification, shipping, fulfillment) start from `earliest`, so they processed retained history once. For example, notifications were created on 2026-11-15 for older local orders.
+
+Not done or not verified in Phase 4:
+- The stuck-order escalation was verified by a unit test only (not observed live; it needs a 10-minute wait or a short `FULFILLMENT_STUCK_AFTER`).
+- No contract fixture exists for `pet-reservation-failed-events` (never produced on the local stack).
+- The retired topics still exist in Kafka with their old messages.
+- Per-service Testcontainers tests (R-TEST-01) are still missing.
+
 ## 5. Definition of done (whole restructuring)
 
 1. From a clean clone: `scripts/generate-dev-keys.sh && make up` → every container healthy.

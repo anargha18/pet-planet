@@ -7,7 +7,7 @@ Confirmed decisions only. Full context: `docs/restructuring/02-target-architectu
 | ID | Decision | Why |
 |---|---|---|
 | DEC-1 | **user-service issues RS256 JWTs** (only holder of the private key); **gateway only validates** (public key), routes, applies coarse role rules. | Edge holds no business logic or secrets. |
-| DEC-2 | **fulfillment-service becomes the order-tracking read model** (CQRS projection). *Planned for Phase 4, not built.* | Keep every service but give each a distinct job. |
+| DEC-2 | **fulfillment-service becomes the order-tracking read model** (CQRS projection). Built in Phase 4. | Keep every service but give each a distinct job. |
 | DEC-3 | **`platform-commons`** shared module: infrastructure only (Kafka conventions, outbox relay). No domain/event classes. | Removes 7× copy-paste without coupling domains. |
 | DEC-4 | Payment stays **simulated and automatic** on reservation, but compensatable (refunds). | Learning project; real payment step later. |
 | DEC-5 | WIP committed as checkpoint before restructuring (`da52467`). | Reviewable diffs. |
@@ -37,3 +37,14 @@ Confirmed decisions only. Full context: `docs/restructuring/02-target-architectu
 - **inventory unknown pet → 404** (was a made-up AVAILABLE row).
 - **Gateway CORS moved into the security chain** so 401/403 carry CORS headers.
 - **Keys:** `generate-dev-keys.sh` keeps existing values unless `--force` (so `make up` never invalidates tokens).
+
+## Phase 4 deviations / decisions (2026-11-15, made during implementation, not separately owner-confirmed)
+
+- **Notification types `OUT_FOR_DELIVERY` and `DELIVERY_FAILED`** were added beyond R-SAGA-09's six; `IN_TRANSIT` sends nothing (`SHIPPED` on ShipmentCreated covers it).
+- **Delivery may skip `OUT_FOR_DELIVERY`** (`IN_TRANSIT → DELIVERED/DELIVERY_FAILED` allowed); terminal statuses never change.
+- **Fulfillment projection rebuilt by replay**: new consumer group `fulfillment-tracking-projection` + `earliest`; `V3` drops the old tables (derived data). Idempotency = timeline `event_id` (no `processed_events`). Row lock per order; status updates monotonic.
+- **Fulfillment emits no events**; `fulfillment-updated-events` and `pet-reservation-released-events` retired (topics left in Kafka).
+- **Payment outcome events carry `customerId`** (additive) so notification/fulfillment know the owner; notification falls back to an earlier notification's owner before dead-lettering.
+- `GET /notifications/order/{id}` returns a list (`[]` when none), not 404.
+- Stuck-order escalation covers `CREATED` and `PAYMENT_PENDING` and is cleared when the order closes.
+

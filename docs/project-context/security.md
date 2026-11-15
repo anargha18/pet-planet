@@ -22,7 +22,7 @@ One authentication model for the whole platform (Phase 3: R-SEC-02, R-SEC-04…0
 | Public | `OPTIONS /**`, `/actuator/health/**`, `POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `GET /api/v1/pets/**` |
 | Never reachable (R-SEC-05) | `/internal/**` (denied; also not routed) |
 | `USER` or `ADMIN` | `/api/v1/users/me/**`, and every other `/api/v1/**` path |
-| `ADMIN` only | `/api/v1/users/**`, non-GET `/api/v1/pets/**`, `/api/v1/inventory/**`, `PUT /api/v1/shipments/order/*/delivered`, `PUT /api/v1/deliveries/order/*/delivered` |
+| `ADMIN` only | `/api/v1/users/**`, non-GET `/api/v1/pets/**`, `/api/v1/inventory/**`, `PUT /api/v1/deliveries/order/*/status` |
 | Denied | anything else |
 
 - **No ownership decisions at the gateway** (R-SEC-04). The former synchronous order-service ownership callout (`GatewayAuthFilter.forwardIfOrderOwned`) and the customer-ID path check were removed; requests for another customer's records are forwarded and rejected by the owning service.
@@ -41,14 +41,14 @@ One authentication model for the whole platform (Phase 3: R-SEC-02, R-SEC-04…0
 | order-service | `/api/v1/orders/**` `USER`/`ADMIN` | `security/OrderAccessPolicy`: users see and cancel only their own orders; list scoped to the caller |
 | inventory-service | `/api/v1/inventory/**` `ADMIN` | — |
 | payment-service | `GET /api/v1/payments/**` `USER`/`ADMIN` | `PaymentService.getForOrder`: payment `customer_id` must equal the caller (payments created before `V4` have no owner: admin only) |
-| notification-service | `GET /api/v1/notifications/**` `USER`/`ADMIN` | `getForOrder` / `getForCustomer` |
-| shipping-service | `GET /api/v1/shipments/**` `USER`/`ADMIN`; `PUT …/delivered` `ADMIN` | `getForOrder` / `getForCustomer` |
-| delivery-tracking-service | `GET /api/v1/deliveries/**` `USER`/`ADMIN`; `PUT …/delivered` `ADMIN` | `getForOrder` / `getForCustomer` |
-| fulfillment-service | `GET /api/v1/fulfillment/**` `USER`/`ADMIN` | `getForOrder` / `getForCustomer` |
+| notification-service | `GET /api/v1/notifications/**` `USER`/`ADMIN` | `getForOrder` (every returned notification must be the caller's) / `getForCustomer` (also `/me`) |
+| shipping-service | `GET /api/v1/shipments/**` `USER`/`ADMIN`; nothing else | `getForOrder` / `getForCustomer` |
+| delivery-tracking-service | `GET /api/v1/deliveries/**` `USER`/`ADMIN`; `PUT /api/v1/deliveries/order/*/status` `ADMIN` | `getForOrder` / `getForCustomer` |
+| fulfillment-service | `GET /api/v1/fulfillment/**` `USER`/`ADMIN` | `getForOrder`; `getMine` (token user); `search` admin only (`requireAdmin`) |
 
 - **`AuthenticatedCaller`** (platform-commons) is resolved as a controller parameter from the validated token: `userId`, `email`, `admin`. `requireAccessTo(customerId)` passes for admins and for the record's owner, otherwise throws `AccessDeniedException` → **403**. A record with no known owner is visible to admins only.
 - Missing records return **404**, not 500. Foreign records return **403** (as order-service already did); this reveals whether an order ID exists, which is accepted for this project.
-- Verified per service by `*OwnershipTest` (owner/foreign/admin/unknown owner/not found) and `*ControllerTest` (real tokens: 401 without or with a forged token, the token subject reaches the check, shared error bodies, admin-only `delivered`), and live by the smoke test's security scenario.
+- Verified per service by `*OwnershipTest` (owner/foreign/admin/unknown owner/not found) and `*ControllerTest` (real tokens: 401 without or with a forged token, the token subject reaches the check, shared error bodies, admin-only delivery status change), and live by the smoke test's security scenario.
 
 ## user-service internal token
 

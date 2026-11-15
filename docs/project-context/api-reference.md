@@ -6,7 +6,7 @@ Application HTTP APIs are exposed through **`gateway-service` (`http://localhost
 
 The gateway routes `/api/v1/auth/**` and `/api/v1/users/**` to the internal `user-service:8088`, `/api/v1/pets/**` to `pet-catalog-service:8080`, `/api/v1/orders/**` to `order-service:8081`, `/api/v1/inventory/**` to `inventory-service:8082`, `/api/v1/payments/**` to `payment-service:8083`, `/api/v1/notifications/**` to `notification-service:8084`, `/api/v1/shipments/**` to `shipping-service:8085`, `/api/v1/deliveries/**` to `delivery-tracking-service:8086`, and `/api/v1/fulfillment/**` to `fulfillment-service:8087`.
 
-All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. `POST /api/v1/auth/register` and `POST /api/v1/auth/login` are public and served by user-service, which issues the token. The gateway applies only coarse rules (admin-only prefixes: user management, catalog writes, inventory, the two `…/delivered` endpoints); `/internal/**` is never reachable. **Every service validates the token again and enforces ownership itself**: a `USER` gets `403` for another customer's records, an `ADMIN` may read any. See [security.md](./security.md).
+All routed requests except catalog `GET` and CORS preflight requests require a valid bearer JWT. `POST /api/v1/auth/register` and `POST /api/v1/auth/login` are public and served by user-service, which issues the token. The gateway applies only coarse rules (admin-only prefixes: user management, catalog writes, inventory, advancing a delivery); `/internal/**` is never reachable. **Every service validates the token again and enforces ownership itself**: a `USER` gets `403` for another customer's records, an `ADMIN` may read any. See [security.md](./security.md).
 
 **Errors.** Every error response, from the gateway or any service, has the same body: `{ "status", "error", "message", "path", "timestamp", "correlationId" }`. `401` = missing/invalid/expired token, `403` = role or ownership, `404` = not found, `409` = invalid state, `400` = validation or malformed JSON. Responses carry an `X-Correlation-Id` header (the same value as `correlationId`).
 
@@ -68,15 +68,16 @@ All require a valid bearer token (`USER` or `ADMIN`). Each service checks owners
 | Method/path | Response (`200 OK`) | Access |
 |---|---|---|
 | `GET /api/v1/payments/order/{orderId}` | `PaymentResponse`: `paymentId`, `orderId`, `customerId`, `amount`, `currency`, `status` (`PROCESSING`/`SUCCEEDED`/`FAILED`/`REFUNDED`), `transactionReference`, `createdAt`, `updatedAt`, `refundedAt`, `refundReason` | owner or `ADMIN`; payments created before payment `V4` have `customerId` `null` and are visible to `ADMIN` only |
-| `GET /api/v1/notifications/order/{orderId}` | `NotificationResponse`: `id`, `orderId`, `customerId`, `message`, `status`, `createdAt`, `sentAt` | owner or `ADMIN` |
-| `GET /api/v1/notifications/customer/{customerId}` | `NotificationResponse[]` | self or `ADMIN` |
-| `GET /api/v1/shipments/order/{orderId}` | `ShipmentResponse`: `id`, `orderId`, `customerId`, `status`, `trackingNumber`, `createdAt`, `shippedAt`, `deliveredAt` | owner or `ADMIN` |
+| `GET /api/v1/notifications/order/{orderId}` | `NotificationResponse[]` (oldest first): `id`, `orderId`, `customerId`, `type` (`ORDER_CONFIRMED`, `ORDER_CANCELLED`, `ORDER_FAILED`, `PAYMENT_REFUNDED`, `SHIPPED`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`), `message`, `status`, `createdAt`, `sentAt`; `[]` if none yet | owner or `ADMIN` |
+| `GET /api/v1/notifications/customer/{customerId}` | `NotificationResponse[]` (newest first) | self or `ADMIN` |
+| `GET /api/v1/notifications/me` | `NotificationResponse[]` of the caller | any signed-in user |
+| `GET /api/v1/shipments/order/{orderId}` | `ShipmentResponse`: `id`, `orderId`, `customerId`, `status` (`CREATED`, `SHIPPED`, `DELIVERED`, `DELIVERY_FAILED`; mirrored from delivery-tracking), `trackingNumber`, `createdAt`, `shippedAt`, `deliveredAt` | owner or `ADMIN` |
 | `GET /api/v1/shipments/customer/{customerId}` | `ShipmentResponse[]` | self or `ADMIN` |
-| `PUT /api/v1/shipments/order/{orderId}/delivered` | `ShipmentResponse`; `404` if no shipment | `ADMIN` |
-| `GET /api/v1/deliveries/order/{orderId}` | `DeliveryResponse`: `id`, `orderId`, `customerId`, `trackingNumber`, `status`, `createdAt`, `updatedAt`, `deliveredAt` | owner or `ADMIN` |
+| `GET /api/v1/deliveries/order/{orderId}` | `DeliveryResponse`: `id`, `orderId`, `customerId`, `trackingNumber`, `status` (`IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`), `createdAt`, `updatedAt`, `deliveredAt`, `timeline[]` (`status`, `note`, `occurredAt`) | owner or `ADMIN` |
 | `GET /api/v1/deliveries/customer/{customerId}` | `DeliveryResponse[]` | self or `ADMIN` |
-| `PUT /api/v1/deliveries/order/{orderId}/delivered` | `DeliveryResponse`; `404` if no delivery | `ADMIN` |
-| `GET /api/v1/fulfillment/order/{orderId}` | `FulfillmentResponse`: `id`, `orderId`, `customerId`, `trackingNumber`, `status`, `lastUpdatedAt`, `notes` | owner or `ADMIN` |
-| `GET /api/v1/fulfillment/customer/{customerId}` | `FulfillmentResponse[]` | self or `ADMIN` |
+| `PUT /api/v1/deliveries/order/{orderId}/status` | Body `{ "status": "OUT_FOR_DELIVERY" \| "DELIVERED" \| "DELIVERY_FAILED", "note"?: string ≤ 500 }` → `DeliveryResponse`; `404` unknown order, `409` illegal transition, `400` missing/unknown status | `ADMIN` |
+| `GET /api/v1/fulfillment/orders/{orderId}` | `TrackingResponse`: `summary` (`orderId`, `customerId`, `orderStatus`, `paymentStatus`, `shipmentStatus`, `trackingNumber`, `deliveryStatus`, `totalAmount`, `escalated`, `escalationReason`, `createdAt`, `updatedAt`; statuses `null` until seen) and `timeline[]` (`eventType`, `source`, `description`, `occurredAt`, oldest first); `404` if the projection has not seen the order | owner or `ADMIN` |
+| `GET /api/v1/fulfillment/orders/me` | Page of `TrackingSummaryResponse` (`page`, `size` default 20, sorted by `updatedAt` desc) | any signed-in user |
+| `GET /api/v1/fulfillment/orders?customerId=&escalated=` | Page of `TrackingSummaryResponse`, both filters optional | `ADMIN` |
 
-The two `…/delivered` endpoints still overlap (shipping's emits no event); consolidating them is Phase 4 (audit S9).
+There is one delivery action: `PUT /api/v1/deliveries/order/{orderId}/status` (Phase 4, R-SAGA-06). Shipping mirrors it from events, and its former `PUT …/delivered` (and delivery-tracking's) were removed.
