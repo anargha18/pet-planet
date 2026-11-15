@@ -55,3 +55,11 @@ Confirmed decisions only. Full context: `docs/restructuring/02-target-architectu
 - **API functions take no token**; the shared client injects it. `AuthProvider` sits inside `BrowserRouter` so it can redirect on 401.
 - Optional nginx production stage (R-FE-06) not built.
 
+## Phase 6 decisions (2026-11-15, not separately owner-confirmed)
+
+- **Gateway DNS cache capped at 5 s** (`gateway.upstream-dns-cache-ttl`) instead of honouring Docker's long TTLs.
+- **Hikari pool 5 per service** via the Compose `x-java-env` anchor (`DB_POOL_SIZE`), rather than raising Postgres `max_connections`.
+- **UI walkthrough committed** (`frontend/scripts/ui-check.mjs`, `make ui-check`) with `puppeteer-core` 23.11.1 as a pinned dev dependency (uses local Chrome; no browser download).
+- **Smoke scenarios R (race) and 6 (stuck order)** added; fulfillment escalation knobs exposed in Compose.
+- R-TEST-01 done only for the projection (Postgres) and platform Kafka; other per-service Testcontainers tests left open.
+

@@ -40,7 +40,7 @@ The navigation adapts to the role: guests see Home and Browse Pets; signed-in us
 ## Verification
 
 - `npm run build` and `npm run check:boundaries` pass.
-- 2026-11-15: a headless-Chrome walkthrough against the running stack passed 29/29 checks, with no JavaScript errors in the console. It covered:
+- `make ui-check` (`frontend/scripts/ui-check.mjs`, see [Testing](./testing.md#ui-walkthrough-make-ui-check)) passed 29/29 checks on 2026-11-15, with no JavaScript errors in the console: on the long-running stack and twice on a fresh clean checkout. It covers:
   - guest redirects and navigation;
   - customer login with return to the requested page;
   - "Admins only" for a customer;
@@ -50,5 +50,3 @@ The navigation adapts to the role: guests see Home and Browse Pets; signed-in us
   - an already-expired token dropped on load;
   - every admin page rendering;
   - an admin "Delivered" action reflected on the order page.
-
-  The script (puppeteer-core + local Chrome) is not part of the repository.

@@ -5,6 +5,9 @@
 
 x-java-env: &java-env
   JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=65 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k}
+  # 9 services share one PostgreSQL (max_connections 100, 3 reserved). Hikari's default of 10 per service used 90
+  # slots and left no room for restarts or a service run from the IDE; 5 each is plenty for this workload.
+  SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: ${DB_POOL_SIZE:-5}
 
 x-java-service: &java-service
   restart: unless-stopped
@@ -282,6 +285,9 @@ services:
       FULFILLMENT_DATABASE_USERNAME: ${FULFILLMENT_DATABASE_USERNAME:-petplanet_fulfillment}
       FULFILLMENT_DATABASE_PASSWORD: ${FULFILLMENT_DATABASE_PASSWORD:-admin123}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # Escalate orders still CREATED/PAYMENT_PENDING after this long (the smoke test shortens both).
+      FULFILLMENT_STUCK_AFTER: ${FULFILLMENT_STUCK_AFTER:-PT10M}
+      FULFILLMENT_ESCALATION_CHECK_MS: ${FULFILLMENT_ESCALATION_CHECK_MS:-60000}
     healthcheck:
       <<: *health-timing
       test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]

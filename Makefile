@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help keys up down reset infra kafka-ui build logs ps test smoke frontend-check
+.PHONY: help keys up down reset infra kafka-ui build logs ps test verify smoke ui-check frontend-check
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -38,11 +38,17 @@ logs: ## Follow logs (all services, or one: make logs s=order-service)
 ps: ## Show container status and health
 	$(COMPOSE) ps
 
-test: ## Run all backend tests (unit + architecture rules) with the Maven wrapper
+test: ## Run all backend tests (unit, slice, architecture, Testcontainers; needs Docker) with the Maven wrapper
 	./mvnw -B test
 
-smoke: ## End-to-end saga + compensation checks against the running stack (restarts payment/inventory)
+verify: ## Like test, plus packaging every module (the restructuring's acceptance build)
+	./mvnw -B verify
+
+smoke: ## End-to-end checks against the running stack (restarts payment/inventory/fulfillment with test settings)
 	scripts/smoke-test.sh
+
+ui-check: ## Headless-Chrome walkthrough of every customer/admin page against the running stack (needs Chrome; CHROME_PATH)
+	cd frontend && npm install --no-audit --no-fund --silent && npm run ui-check
 
 frontend-check: ## Build the frontend and check its folder boundaries
 	cd frontend && npm run check:boundaries && npm run build

@@ -1,6 +1,6 @@
 # Pet Planet — target architecture and restructuring requirements
 
-Status: **approved plan, not implemented** (decisions confirmed by the owner on 2026-11-14). This is the reference for the restructuring work. Requirement IDs (`R-…`) are stable: commits, PRs and docs should cite them. Finding IDs (`F…`, `S…`, `A…`, `U…`, `D…`) refer to [01-audit-findings.md](./01-audit-findings.md).
+Status: **implemented** (decisions confirmed by the owner on 2026-11-14; all phases done by 2026-11-15, see the Progress log). This is the reference for the restructuring work. Requirement IDs (`R-…`) are stable: commits, PRs and docs should cite them. Finding IDs (`F…`, `S…`, `A…`, `U…`, `D…`) refer to [01-audit-findings.md](./01-audit-findings.md).
 
 Guiding constraints from the project owner:
 1. **Keep every existing capability.** That covers all 10 services, the storefront, the saga, compensation, the outbox, idempotency, and user/admin management. Nothing gets dropped to make things easier. A service whose job overlaps another's gets a distinct responsibility instead of being deleted.
@@ -564,6 +564,44 @@ Not done or not verified in Phase 5:
 - No automated frontend tests are in the repository (the walkthrough script is not committed).
 - The optional production nginx stage (R-FE-06) was not added.
 - There is no favicon (404, cosmetic).
+
+**Phase 6: done (2026-11-15).**
+- R-INF-01 acceptance: `./mvnw verify` BUILD SUCCESS, 337 tests, all 11 modules (`make verify`).
+  - Fixed the intermittent `KafkaPlatformIntegrationTest` failure (exit code 126). Root cause: Testcontainers 1.21 runs the starter script as soon as the file exists, before Docker finishes copying it. The test now waits until the script is executable.
+- R-TEST-04, completed:
+  - `make smoke` gained scenario **R**: two customers race for one pet → exactly one `CONFIRMED`; the loser `FAILED` with a "no longer available" notification and never charged.
+  - It gained scenario **6**: live stuck-order escalation and clearing, with the new Compose knobs `FULFILLMENT_STUCK_AFTER` and `FULFILLMENT_ESCALATION_CHECK_MS`.
+  - 82 checks.
+- R-TEST-01, part:
+  - `OrderTrackingProjectionPostgresTest` runs on real PostgreSQL 16 with Flyway: out-of-order events, replay, 5 concurrent listeners;
+  - a `pet-reservation-failed` contract fixture captured from the race scenario (order, fulfillment).
+- R-TEST-05: Postman collection + local environment in `postman/`, verified with newman (22/22 assertions).
+- The UI walkthrough is committed as `frontend/scripts/ui-check.mjs` / `make ui-check` (`puppeteer-core` dev dependency, local Chrome).
+- R-DOC-01…04:
+  - `implementation-status.md` rewritten (feature → verifying check, plus known limitations; warning removed);
+  - README rewritten (quickstart, accounts, commands, checks, a correct saga description without `PAID`);
+  - docs index status updated;
+  - infrastructure, gateway and testing docs updated.
+
+Found and fixed during verification:
+1. **Gateway routed to stale container IPs.** Reactor Netty cached Docker DNS answers (long TTL). After the smoke test restarted fulfillment and payment together, fulfillment's old IP went to payment, and the gateway returned 500 for fulfillment for minutes. Reproduced deliberately by moving fulfillment to a new IP: still 500 after 90 s. Fixed with `routing/UpstreamDnsConfig`, which caps the DNS cache at `PT5S`; after the fix the gateway followed the new IP.
+2. **PostgreSQL connection headroom.** 9 services × the Hikari default of 10 = 90 of the 97 usable slots. The pool is now capped at 5 per service via the `x-java-env` anchor (`DB_POOL_SIZE`), so the stack uses 45.
+3. The UI script's last step raced the asynchronous tracking update on a fast fresh stack. It now reloads like a user pressing Refresh.
+
+Definition of done (§5), verified on 2026-11-15:
+1. A clean checkout (only tracked and new files, no `.env`, fresh volumes under its own Compose project) → `make up`: all 13 containers healthy in about 90 s (warm Maven cache).
+2. Browser flow: register, log in, browse, cart, checkout, live progress to `CONFIRMED`, admin delivers, timeline and notifications. Covered by `make ui-check` 29/29 on the clean checkout (twice) and on the long-running stack.
+3. Cancel, payment-failure, expiry and race paths stay consistent: `make smoke` 82/82 on both stacks.
+4. `./mvnw verify` and `make smoke` pass.
+5. Docs: `docs/project-context` swept against the code. `implementation-status.md` claims only what the listed checks show.
+
+Not done (recorded as known limitations):
+- the full event envelope (R-EVT-02) and reuse of the HTTP correlation ID as the saga correlation ID (R-EVT-08);
+- Testcontainers tests for every service hop (R-TEST-01 partly done);
+- contract fixtures for `pet-reservation-expired` / `pet-catalog-events`;
+- frontend unit tests;
+- the optional nginx stage;
+- the old development key in git history.
 
 ## 5. Definition of done (whole restructuring)
 

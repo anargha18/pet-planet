@@ -1,0 +1,1 @@
+{"eventId":"944b19fe-c55a-448b-b769-822a454d0ada","eventType":"PetReservationFailedEvent","eventVersion":1,"aggregateId":"9b6d36dc-bf99-4dbc-adb6-5eda2a5170d7","timestamp":"2026-11-15T08:27:36.360984549Z","correlationId":"4948b46f-c619-4468-b344-4d40abc94980","orderId":31,"petId":"7afb0236-3a55-4f6b-8a06-bcd5e489a83f","reason":"PET_ALREADY_RESERVED"}
