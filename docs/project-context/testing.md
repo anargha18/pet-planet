@@ -6,7 +6,7 @@
 |---|---|
 | `pet-catalog-service` | `PetServiceTest` (creation defaults to `AVAILABLE`, archive → `RETIRED` + `PetArchived`, archiving a reserved pet rejected, update cannot change availability) |
 | `order-service` | `OrderCommandServiceTest` (order creation, pricing, validation, catalog errors, cancellation), `OrderQueryServiceTest` (lookup, not-found, owner access control), `OrderSagaServiceTest` (confirm on `PetsSold`; `FAILED` + `OrderFailed` on payment failure and sale conflict; `CANCELLED` + `OrderCancelled` on expiry; late events on terminal orders ignored), `OrderStateMachineTest` (every legal/illegal transition) and `OrderControllerTest` (`@WebMvcTest` with Spring Security; malformed JSON → 400) |
-| `inventory-service` | `InventoryServiceTest` (all-or-nothing reservation, duplicate `OrderCreated` ignored, unknown pet → `PET_NOT_FOUND`, sale only while still reserved → `PetsSold` or `InventorySaleConflict`, `OrderFailed` releases only this order's reservations, archived pet → `RETIRED`) |
+| `inventory-service` | `InventoryServiceTest` (all-or-nothing reservation, duplicate `OrderCreated` ignored, unknown pet → `PET_NOT_FOUND`, sale only while still reserved → `PetsSold` or `InventorySaleConflict`, `OrderFailed` releases only this order's reservations, archived pet → `RETIRED`), `InventoryControllerTest` (admin paged overview with status filter, user 403) |
 | `payment-service` | `PaymentServiceTest` (charge the order total, declined charge, duplicate event not charged twice, closed order never charged, missing amount rejected, refund on order closure, closure without payment) with a stub `PaymentGateway` |
 | payment, notification, shipping, delivery-tracking, fulfillment | `*OwnershipTest` (owner allowed, foreign customer → `AccessDeniedException`, admin allowed, record without owner admin-only, missing → `*NotFoundException`, customer lists self/admin only; notification: empty list for an order without notifications; fulfillment: `OrderTrackingQueryServiceTest`, search admin-only) and `*ControllerTest` (`@WebMvcTest` with **real RS256 tokens** from `TestJwtIssuer`: 401 without or with a forged token, token subject passed to the ownership check, 403/404 shared error body; delivery status change admin-only with 404/409/400; shipping has no mutation endpoint) |
 | `notification-service` | `NotificationServiceTest` (one typed notification per event: wording per type and reason, refund owner taken from an earlier notification or dead-lettered, `IN_TRANSIT` sends nothing, duplicate event / existing type sends nothing, `NotificationSentEvent` payload) |
@@ -37,9 +37,13 @@ Service tests are unit or slice tests with mocks. The only real-broker test is `
 
 plus scenario **S (security, Phase 3)**: a freshly registered second customer gets 403 on the first customer's order, payment, shipment, notification, delivery and fulfillment records and notification list, while the owner and the admin get 200; 401 without a token with the shared error body; a service 403 with the shared body; user on `/users` and on the delivery status change → 403; unknown order payment → 404; `/users/me` works from the token.
 
-Scenarios 3–5 restart payment/inventory with `PAYMENT_SIMULATION_RESULT`, `PAYMENT_SIMULATION_DELAY`, `INVENTORY_RESERVATION_TIMEOUT` and `INVENTORY_EXPIRATION_CHECK_DELAY_MS`, and the defaults are restored on exit. It takes about 5 minutes. Last full run: 74/74 passed on 2026-11-15 (Phase 4).
+Scenarios 3–5 restart payment/inventory with `PAYMENT_SIMULATION_RESULT`, `PAYMENT_SIMULATION_DELAY`, `INVENTORY_RESERVATION_TIMEOUT` and `INVENTORY_EXPIRATION_CHECK_DELAY_MS`, and the defaults are restored on exit. It takes about 5 minutes. Last full run: 74/74 passed on 2026-11-15 (after Phase 5).
 
 Known flake: when the full stack is running on a 4 GB Docker VM, `KafkaPlatformIntegrationTest` can fail to start its own Kafka container (exit code 126). It passes on rerun or with the stack stopped.
+
+## Frontend
+
+No automated frontend tests are in the repository. `npm run build` and `npm run check:boundaries` are the checks. A headless-Chrome walkthrough of every customer and admin page passed 29/29 on 2026-11-15 (Phase 5); see [Frontend → Verification](./frontend.md#verification). Its script was run from the session scratchpad and is not committed.
 
 ## Commands
 

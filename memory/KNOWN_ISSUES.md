@@ -1,18 +1,18 @@
 # Known issues (open as of 2026-11-15, Phase 4 done)
 
-IDs refer to `docs/restructuring/01-audit-findings.md`. Fixed so far: F1, F2, F3, F4 (via one-time reset), F5, F6, S1, S2, S3, S4, S5, S6, S7, S8, S14, U1 (backend side), A1–A5 (Phase 3, verified by tests + `make smoke` 49/49), S9–S12 (Phase 4, verified by tests + `make smoke` 74/74). Remove an entry only after the fix is verified.
+IDs refer to `docs/restructuring/01-audit-findings.md`. Fixed so far: F1, F2, F3, F4 (via one-time reset), F5, F6, S1, S2, S3, S4, S5, S6, S7, S8, S14, U1 (backend side), A1–A5 (Phase 3, verified by tests + `make smoke` 49/49), S9–S12 (Phase 4, verified by tests + `make smoke` 74/74), U2–U5 (Phase 5, verified by a 29-check headless UI walkthrough). Remove an entry only after the fix is verified.
 
 ## Open — planned phase
 
 | Issue | Phase |
 |---|---|
-| U2 No admin UI; U3 no 401/expired-token handling or protected routes; U4 tracking page swallows errors, no polling; U5 duplicate axios instances | 5 |
 | R-EVT-02 full envelope (`causationId`, `producer`, `aggregateId`=order) not implemented; `aggregateId` often random | later |
 | R-EVT-08: HTTP correlation ID is in the MDC/error bodies, but order-service does not reuse it as the saga `correlationId` | later |
 | R-TEST-01 per-service Testcontainers (Kafka+Postgres) tests not written; contract fixtures missing for `pet-reservation-failed` (never produced locally), `pet-reservation-expired`, `pet-catalog-events` | 6 |
 | Fulfillment stuck-order escalation verified by unit test only (not observed live) | 6 |
 | Retired topics `fulfillment-updated-events`, `pet-reservation-released-events` still exist in Kafka with old messages | accepted |
-| Frontend still uses per-service lookups (shows latest notification only); fulfillment tracking view not used yet | 5 |
+| No automated frontend tests in the repo (Phase 5 walkthrough script not committed) | 6 |
+| Admin deliveries page filters a 50-row tracking page client-side to shipped orders | accepted |
 | Old dev RSA key pair still in git history (removed from tree; rotate local `.env` with `generate-dev-keys.sh --force`) | accepted |
 | Payments created before payment `V4` have `customer_id` NULL → admin-only | accepted |
 | README saga step 4 still says `PAID` (stale since Phase 2) | 6 |
@@ -33,4 +33,7 @@ IDs refer to `docs/restructuring/01-audit-findings.md`. Fixed so far: F1, F2, F3
 - Spring needs `@Autowired` on one constructor when a bean has two (fulfillment `EscalationService` failed to start; unit tests did not catch it — only `make up` did).
 - Postgres superuser in compose is `petplanet_admin` (not `postgres`): `docker exec pet-planet-postgres psql -U petplanet_admin -d <db>`.
 - Fulfillment `shipment-created-events.DLT` holds the Phase 1 poison message (`{this is not json`) re-read by the new projection group: expected.
+- Headless Chrome after typing a password into the login form swallows later input events in that tab (native password prompt; flags did not help). UI scripts must continue in a new tab (same profile keeps localStorage).
+- Dev-mode React StrictMode runs effects twice: data-loaded buttons re-render once just after load; UI scripts must wait ~0.5 s before clicking.
+- The `frontend` image copies the source: `docker compose up -d --build frontend` after every frontend change.
 

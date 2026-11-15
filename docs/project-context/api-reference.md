@@ -59,7 +59,10 @@ All `/api/v1/inventory/**` endpoints require `ADMIN`. Inventory is **read-only**
 
 | Method/path | Purpose | Response/status |
 |---|---|---|
+| `GET /api/v1/inventory/pets` | Admin overview (Phase 5): optional `status` (`AVAILABLE`, `RESERVED`, `SOLD`, `RETIRED`), pageable (`page`, `size` default 20, sort default `updatedAt,desc`). | `Page<InventoryResponse>`, `200 OK`. |
 | `GET /api/v1/inventory/pets/{petId}` | Returns inventory status for UUID `petId`. | `InventoryResponse`, `200 OK`; `404` if inventory has no record of the pet. |
+
+`InventoryResponse`: `petId`, `status`, `orderId` (reserving or buying order, kept after the sale), `reservationId`, `reservedAt`, `reservationExpiresAt`, `soldAt`, `version`, `updatedAt` (`orderId` and `updatedAt` added in Phase 5).
 
 ## Payments, notifications, shipping, delivery, and fulfillment
 
