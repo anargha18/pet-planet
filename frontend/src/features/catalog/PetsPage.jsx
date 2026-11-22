@@ -20,6 +20,9 @@ import {
 } from '@mui/material';
 import { Link, useSearchParams } from 'react-router-dom';
 import { extractApiError, getPets } from '../../api';
+import { petImage } from '../../components/petImage';
+import StatusChip from '../../components/StatusChip';
+import { humanize } from '../../components/format';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {
@@ -187,13 +190,14 @@ function PetsPage() {
           </Box>
         ) : (
           <>
+            <Box>
             <Grid container spacing={3}>
               {sortedPets.map((pet) => (
                 <Grid item xs={12} sm={6} md={4} key={pet.id}>
                   <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <CardMedia
                       component="img"
-                      image={pet.image || 'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=900&q=80'}
+                      image={petImage(pet)}
                       alt={pet.name}
                       sx={{ height: 260, objectFit: 'cover' }}
                     />
@@ -207,11 +211,9 @@ function PetsPage() {
                         </Typography>
                       </Stack>
                       <Typography variant="body2" color="text.secondary" gutterBottom>
-                        {pet.species} • {pet.breed}
+                        {humanize(pet.species)} • {pet.breed}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {pet.availabilityStatus || 'AVAILABLE'}
-                      </Typography>
+                      <StatusChip status={pet.availabilityStatus || 'AVAILABLE'} />
                     </CardContent>
                     <CardActions>
                       <Button component={Link} to={`/pets/${pet.id}`} variant="contained" fullWidth>
@@ -222,15 +224,18 @@ function PetsPage() {
                 </Grid>
               ))}
             </Grid>
-
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
-              <Pagination
-                page={page + 1}
-                count={Math.max(totalPages, 1)}
-                color="primary"
-                onChange={handlePageChange}
-              />
             </Box>
+
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+                <Pagination
+                  page={page + 1}
+                  count={totalPages}
+                  color="primary"
+                  onChange={handlePageChange}
+                />
+              </Box>
+            )}
           </>
         )}
       </Stack>

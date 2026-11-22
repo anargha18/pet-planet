@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useCart } from './CartContext';
+import { petImage } from '../../components/petImage';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {
@@ -56,7 +57,7 @@ function CartPage() {
                   <Grid item xs={12} sm={4}>
                     <CardMedia
                       component="img"
-                      image={item.image || 'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=900&q=80'}
+                      image={petImage(item)}
                       alt={item.name}
                       sx={{ height: 180, objectFit: 'cover' }}
                     />

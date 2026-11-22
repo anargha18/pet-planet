@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   AppBar,
+  Badge,
   Box,
   Button,
   Chip,
@@ -62,16 +63,16 @@ function Layout() {
                 P
               </Box>
               <Box>
-                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }} noWrap>
                   Pet Planet
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" noWrap>
                   Find Your Perfect Companion
                 </Typography>
               </Box>
             </Box>
 
-            <Stack direction="row" spacing={2} sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
+            <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', whiteSpace: 'nowrap' }}>
               {navItems.map((item) => (
                 <Button key={item.path} component={Link} to={item.path} color="inherit" sx={{ fontWeight: 600 }}>
                   {item.label}
@@ -123,14 +124,16 @@ function Layout() {
               )}
             </Stack>
 
-            <IconButton
-              edge="end"
-              color="inherit"
-              sx={{ display: { xs: 'flex', md: 'none' } }}
-              onClick={() => setDrawerOpen(true)}
-            >
-              <MenuIcon />
-            </IconButton>
+            <Stack direction="row" spacing={0.5} sx={{ display: { xs: 'flex', lg: 'none' }, alignItems: 'center' }}>
+              <IconButton component={Link} to="/cart" color="inherit" aria-label="Cart">
+                <Badge badgeContent={cartCount} color="secondary">
+                  <ShoppingCartOutlinedIcon />
+                </Badge>
+              </IconButton>
+              <IconButton edge="end" color="inherit" aria-label="Menu" onClick={() => setDrawerOpen(true)}>
+                <MenuIcon />
+              </IconButton>
+            </Stack>
           </Toolbar>
         </Container>
       </AppBar>
@@ -145,6 +148,11 @@ function Layout() {
                 </ListItemButton>
               </ListItem>
             ))}
+            <ListItem disablePadding>
+              <ListItemButton component={Link} to="/cart" onClick={() => setDrawerOpen(false)}>
+                <ListItemText primary={cartCount > 0 ? `Cart (${cartCount})` : 'Cart'} />
+              </ListItemButton>
+            </ListItem>
             <Divider sx={{ my: 1 }} />
             {auth ? (
               <>

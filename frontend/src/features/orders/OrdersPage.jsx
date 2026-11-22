@@ -58,7 +58,7 @@ function OrdersPage() {
   return (
     <Container maxWidth="lg" sx={{ py: 6 }}>
       <Stack spacing={3}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" spacing={2}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
           <Box>
             <Typography variant="overline" color="primary.main" sx={{ fontWeight: 700, letterSpacing: '0.14em' }}>
               Orders

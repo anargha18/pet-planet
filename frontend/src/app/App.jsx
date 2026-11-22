@@ -15,6 +15,7 @@ import { CheckoutPage } from '../features/checkout';
 import { OrderDetailPage, OrdersPage } from '../features/orders';
 import { ProfilePage } from '../features/profile';
 import AdminRoute from './AdminRoute';
+import NotFoundPage from './NotFoundPage';
 import ProtectedRoute from './ProtectedRoute';
 
 function App() {
@@ -48,7 +49,7 @@ function App() {
                 <Route path="deliveries" element={<AdminDeliveriesPage />} />
               </Route>
 
-              <Route path="*" element={<HomePage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
         </CartProvider>

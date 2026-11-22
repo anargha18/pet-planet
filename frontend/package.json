@@ -8,7 +8,12 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "ui-check": "node scripts/ui-check.mjs"
+    "ui-check": "node scripts/ui-check.mjs",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report e2e-results/report",
+    "e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@emotion/react": "^11.11.0",
@@ -21,6 +26,7 @@
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@vitejs/plugin-react": "^4.3.2",
     "puppeteer-core": "23.11.1",
     "vite": "^5.4.10"

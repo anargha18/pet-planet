@@ -25,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.NumberFormat;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -60,7 +62,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onPetReserved(PetReservedEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "PetReserved", "inventory-service",
-                "Pets reserved; simulated payment started", t -> {
+                "Pet reserved for you; simulated payment started", t -> {
                     t.knowCustomer(e.customerId());
                     t.knowTotal(e.totalAmount());
                     t.applyOrderStatus(TrackedOrderStatus.PAYMENT_PENDING, at(e.timestamp()));
@@ -71,7 +73,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onPetReservationFailed(PetReservationFailedEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "PetReservationFailed", "inventory-service",
-                "Reservation failed: " + text(e.reason()), t -> { });
+                "Pet could not be reserved (" + reason(e.reason()) + ")", t -> { });
     }
 
     @Transactional
@@ -86,7 +88,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onPaymentFailed(PaymentFailedEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "PaymentFailed", "payment-service",
-                "Payment failed: " + text(e.reason()), t -> {
+                "Payment failed (" + reason(e.reason()) + ")", t -> {
                     t.knowCustomer(e.customerId());
                     t.applyPaymentStatus(TrackedPaymentStatus.FAILED);
                 });
@@ -95,7 +97,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onPaymentRefunded(PaymentRefundedEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "PaymentRefunded", "payment-service",
-                "Payment" + amount(" of ", e.amount(), "") + " refunded (" + text(e.reason()) + ")", t -> {
+                "Payment" + amount(" of ", e.amount(), "") + " refunded (" + reason(e.reason()) + ")", t -> {
                     t.knowCustomer(e.customerId());
                     t.applyPaymentStatus(TrackedPaymentStatus.REFUNDED);
                 });
@@ -114,7 +116,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onOrderCancelled(OrderCancelledEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "OrderCancelled", "order-service",
-                "Order cancelled (" + text(e.reason()) + ")", t -> {
+                "Order cancelled (" + reason(e.reason()) + ")", t -> {
                     t.knowCustomer(e.customerId());
                     t.applyOrderStatus(TrackedOrderStatus.CANCELLED, at(e.timestamp()));
                 });
@@ -123,7 +125,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onOrderFailed(OrderFailedEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "OrderFailed", "order-service",
-                "Order failed (" + text(e.reason()) + ")", t -> {
+                "Order failed (" + reason(e.reason()) + ")", t -> {
                     t.knowCustomer(e.customerId());
                     t.applyOrderStatus(TrackedOrderStatus.FAILED, at(e.timestamp()));
                 });
@@ -132,7 +134,7 @@ public class OrderTrackingProjector {
     @Transactional
     public boolean onShipmentCreated(ShipmentCreatedEvent e) {
         return apply(e.eventId(), e.orderId(), e.timestamp(), "ShipmentCreated", "shipping-service",
-                "Shipment created, tracking number " + text(e.trackingNumber()), t -> {
+                "Shipped with tracking number " + text(e.trackingNumber()), t -> {
                     t.knowCustomer(e.customerId());
                     t.applyShipment(e.trackingNumber());
                 });
@@ -142,7 +144,7 @@ public class OrderTrackingProjector {
     public boolean onDeliveryStatusUpdated(DeliveryStatusUpdatedEvent e) {
         String note = e.note() == null || e.note().isBlank() ? "" : " (" + e.note().strip() + ")";
         return apply(e.eventId(), e.orderId(), e.timestamp(), "DeliveryStatusUpdated", "delivery-tracking-service",
-                "Delivery status " + text(e.status()) + note, t -> {
+                deliveryText(e.status()) + note, t -> {
                     t.knowCustomer(e.customerId());
                     t.applyDelivery(TrackedDeliveryStatus.parse(e.status()), e.trackingNumber());
                 });
@@ -150,9 +152,8 @@ public class OrderTrackingProjector {
 
     @Transactional
     public boolean onNotificationSent(NotificationSentEvent e) {
-        String type = e.notificationType() == null ? "" : " [" + e.notificationType() + "]";
         return apply(e.eventId(), e.orderId(), e.timestamp(), "NotificationSent", "notification-service",
-                "Customer notified" + type + ": " + text(e.message()), t -> t.knowCustomer(e.customerId()));
+                "Customer notified: " + text(e.message()), t -> t.knowCustomer(e.customerId()));
     }
 
     /** Returns false for events that were skipped (no IDs) or already projected. */
@@ -183,7 +184,27 @@ public class OrderTrackingProjector {
         return value == null || value.isBlank() ? "unknown" : value;
     }
 
+    /** "CUSTOMER_CANCELLED" -> "customer cancelled"; "RESERVATION_FAILED:PET_ALREADY_RESERVED" -> "reservation failed: pet already reserved". */
+    static String reason(String code) {
+        return text(code).replace('_', ' ').replaceAll(" *: *", ": ").toLowerCase(Locale.ROOT);
+    }
+
+    static String deliveryText(String status) {
+        return switch (text(status)) {
+            case "IN_TRANSIT" -> "In transit";
+            case "OUT_FOR_DELIVERY" -> "Out for delivery";
+            case "DELIVERED" -> "Delivered";
+            case "DELIVERY_FAILED" -> "Delivery failed";
+            default -> "Delivery status: " + reason(status);
+        };
+    }
+
+    /** Amounts in the timeline read like prices: "$1,250.00". */
     private static String amount(String prefix, BigDecimal value, String suffix) {
-        return value == null ? "" : prefix + value.setScale(2, RoundingMode.HALF_UP) + suffix;
+        if (value == null) {
+            return "";
+        }
+        NumberFormat money = NumberFormat.getCurrencyInstance(Locale.US);
+        return prefix + money.format(value.setScale(2, RoundingMode.HALF_UP)) + suffix;
     }
 }

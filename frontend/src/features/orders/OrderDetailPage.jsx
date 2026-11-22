@@ -79,7 +79,7 @@ function OrderDetailPage() {
       <Stack spacing={3}>
         <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2}>
           <Box>
-            <Button component={Link} to="/orders" size="small" sx={{ mb: 1 }}>← All orders</Button>
+            <Button component={Link} to="/orders" size="small" sx={{ mb: 1, ml: -1.5 }}>← All orders</Button>
             <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
               Order #{order.id}
             </Typography>
@@ -111,6 +111,7 @@ function OrderDetailPage() {
         <ErrorState message={actionError} />
         {(order.status === 'CREATED' || order.status === 'PAYMENT_PENDING') && <SimulatedPaymentNote />}
 
+        <Box>
         <Grid container spacing={3}>
           <Grid item xs={12} md={7}>
             <Card>
@@ -197,6 +198,7 @@ function OrderDetailPage() {
             </Card>
           </Grid>
         </Grid>
+        </Box>
       </Stack>
     </Container>
   );
