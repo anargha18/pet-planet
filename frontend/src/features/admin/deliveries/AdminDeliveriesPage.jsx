@@ -23,6 +23,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../../components/PageSt
 import StatusChip from '../../../components/StatusChip';
 import AdminPageHeader from '../AdminPageHeader';
 import { usePagedQuery } from '../usePagedQuery';
+import { CustomerLabel, useUserNames } from '../useUserNames';
 
 const ACTION_COLOR = { OUT_FOR_DELIVERY: 'primary', DELIVERED: 'success', DELIVERY_FAILED: 'error' };
 
@@ -35,6 +36,7 @@ function AdminDeliveriesPage() {
   const [onlyEscalated, setOnlyEscalated] = useState(false);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(null);
+  const names = useUserNames();
   const { page, rows, error, loading, reload } = usePagedQuery(searchTracking, {
     page: pageIndex, size: 50, ...(onlyEscalated && { escalated: true }),
   });
@@ -91,7 +93,7 @@ function AdminDeliveriesPage() {
                 {shipped.map((row) => (
                   <TableRow key={row.orderId} hover>
                     <TableCell sx={{ fontWeight: 700 }}><Link to={`/orders/${row.orderId}`}>#{row.orderId}</Link></TableCell>
-                    <TableCell>{row.customerId ?? '—'}</TableCell>
+                    <TableCell><CustomerLabel id={row.customerId} names={names} /></TableCell>
                     <TableCell>{row.trackingNumber || '—'}</TableCell>
                     <TableCell><StatusChip status={row.shipmentStatus} /></TableCell>
                     <TableCell>

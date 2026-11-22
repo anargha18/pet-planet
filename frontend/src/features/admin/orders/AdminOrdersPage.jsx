@@ -21,6 +21,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../../components/PageSt
 import StatusChip from '../../../components/StatusChip';
 import AdminPageHeader from '../AdminPageHeader';
 import { usePagedQuery } from '../usePagedQuery';
+import { CustomerLabel, useUserNames } from '../useUserNames';
 
 const STATUSES = ['CREATED', 'PAYMENT_PENDING', 'CONFIRMED', 'CANCELLED', 'FAILED'];
 
@@ -29,6 +30,7 @@ function AdminOrdersPage() {
   const [pageIndex, setPageIndex] = useState(0);
   const [status, setStatus] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const names = useUserNames();
   const { page, rows, error, loading, reload } = usePagedQuery(getOrders, {
     page: pageIndex,
     size: 20,
@@ -70,7 +72,7 @@ function AdminOrdersPage() {
                 {rows.map((order) => (
                   <TableRow key={order.id} hover>
                     <TableCell sx={{ fontWeight: 700 }}>#{order.id}</TableCell>
-                    <TableCell>{order.customerId}</TableCell>
+                    <TableCell><CustomerLabel id={order.customerId} names={names} /></TableCell>
                     <TableCell>{formatDateTime(order.createdAt)}</TableCell>
                     <TableCell>{order.items?.map((item) => item.petName).join(', ')}</TableCell>
                     <TableCell align="right">{formatCurrency(order.totalAmount)}</TableCell>

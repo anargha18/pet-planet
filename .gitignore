@@ -5,3 +5,6 @@
 target/
 dist/
 node_modules/
+# Playwright end-to-end tests: saved sign-ins, reports, traces
+frontend/e2e/.auth/
+frontend/e2e-results/

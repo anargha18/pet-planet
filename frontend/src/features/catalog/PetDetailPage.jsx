@@ -7,7 +7,6 @@ import {
   CardMedia,
   Chip,
   Container,
-  Divider,
   Grid,
   Stack,
   Typography,
@@ -16,6 +15,9 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCart } from '../cart';
 import { extractApiError, getPetById } from '../../api';
+import { petImage } from '../../components/petImage';
+import StatusChip from '../../components/StatusChip';
+import { humanize } from '../../components/format';
 
 const getCurrencyLabel = (value) =>
   new Intl.NumberFormat('en-US', {
@@ -91,7 +93,7 @@ function PetDetailPage() {
           <Card>
             <CardMedia
               component="img"
-              image={pet.image || 'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=900&q=80'}
+              image={petImage(pet)}
               alt={pet.name}
               sx={{ height: { xs: 360, md: 560 }, objectFit: 'cover' }}
             />
@@ -101,7 +103,7 @@ function PetDetailPage() {
         <Grid item xs={12} md={6}>
           <Stack spacing={2}>
             <Typography variant="overline" color="primary.main" sx={{ fontWeight: 700, letterSpacing: '0.16em' }}>
-              {pet.species}
+              {humanize(pet.species)}
             </Typography>
             <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.05em' }}>
               {pet.name}
@@ -109,11 +111,7 @@ function PetDetailPage() {
 
             <Stack direction="row" spacing={1} flexWrap="wrap">
               <Chip label={pet.breed} color="primary" variant="outlined" />
-              <Chip
-                label={pet.availabilityStatus || 'AVAILABLE'}
-                color={isAvailable ? 'success' : 'default'}
-                variant={isAvailable ? 'filled' : 'outlined'}
-              />
+              <StatusChip status={pet.availabilityStatus || 'AVAILABLE'} size="medium" />
             </Stack>
 
             <Typography variant="h4" color="primary.main" sx={{ fontWeight: 800 }}>
@@ -128,11 +126,11 @@ function PetDetailPage() {
               <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary">Age</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 600 }}>{pet.age} years</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>{pet.age} {Number(pet.age) === 1 ? 'year' : 'years'}</Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary">Gender</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 600 }}>{pet.gender}</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>{humanize(pet.gender)}</Typography>
                 </Grid>
               </Grid>
             </Box>
@@ -149,8 +147,6 @@ function PetDetailPage() {
           </Stack>
         </Grid>
       </Grid>
-
-      <Divider sx={{ my: 5 }} />
     </Container>
   );
 }

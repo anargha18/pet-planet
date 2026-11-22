@@ -11,6 +11,4 @@ dist
 # Service images build from the repository root; these folders are not needed there.
 frontend
 docs
-postman
-.postman
 .mvn/wrapper/maven-wrapper.jar
