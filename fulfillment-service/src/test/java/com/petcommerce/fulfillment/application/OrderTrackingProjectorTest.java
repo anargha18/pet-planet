@@ -51,7 +51,7 @@ class OrderTrackingProjectorTest {
 
     @Test
     void firstSightOfAnEventUpdatesStateAndTimeline() {
-        when(timelineRepository.insertIfAbsent(any(), eq(10L), eq("OrderCreated"), eq("order-service"), contains("123.40"), any()))
+        when(timelineRepository.insertIfAbsent(any(), eq(10L), eq("OrderCreated"), eq("order-service"), eq("Order placed (total $123.40)"), any()))
                 .thenReturn(1);
 
         assertTrue(projector.onOrderCreated(new OrderCreatedEvent(UUID.randomUUID(), "OrderCreatedEvent", Instant.now(),

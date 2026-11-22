@@ -2,6 +2,8 @@ package com.petcommerce.notification.domain.policy;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.NumberFormat;
+import java.util.Locale;
 
 /** Customer-facing text for each notification type (R-SAGA-09: say what actually happened, nothing more). */
 public final class NotificationWording {
@@ -36,7 +38,8 @@ public final class NotificationWording {
     }
 
     public static String paymentRefunded(Long orderId, BigDecimal amount) {
-        String value = amount == null ? "Your payment" : "Your payment of " + amount.setScale(2, RoundingMode.HALF_UP);
+        String value = amount == null ? "Your payment"
+                : "Your payment of " + NumberFormat.getCurrencyInstance(Locale.US).format(amount.setScale(2, RoundingMode.HALF_UP));
         return value + " for order #" + orderId + " has been refunded.";
     }
 

@@ -15,6 +15,9 @@ import {
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { Link } from 'react-router-dom';
 import { extractApiError, getPets } from '../../api';
+import { useAuth } from '../auth';
+import { petImage } from '../../components/petImage';
+import { humanize } from '../../components/format';
 
 const categories = [
   {
@@ -36,6 +39,7 @@ const getCurrencyLabel = (value) =>
   }).format(Number(value || 0));
 
 function HomePage() {
+  const { auth } = useAuth();
   const [featuredPets, setFeaturedPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,9 +47,17 @@ function HomePage() {
   useEffect(() => {
     const fetchFeaturedPets = async () => {
       try {
-        const response = await getPets({ page: 0, size: 4 });
+        // Four available pets, alternating species, so the row is not just the newest four of one kind.
+        const response = await getPets({ page: 0, size: 24, availabilityStatus: 'AVAILABLE' });
         const items = response?.content || [];
-        setFeaturedPets(items);
+        const groups = {};
+        items.forEach((pet) => { (groups[pet.species] ||= []).push(pet); });
+        const bySpecies = Object.values(groups);
+        const mixed = [];
+        for (let i = 0; mixed.length < Math.min(4, items.length); i += 1) {
+          bySpecies.forEach((list) => { if (list[i] && mixed.length < 4) mixed.push(list[i]); });
+        }
+        setFeaturedPets(mixed);
       } catch (apiError) {
         setError(extractApiError(apiError));
       } finally {
@@ -89,9 +101,15 @@ function HomePage() {
                   <Button component={Link} to="/pets" variant="contained" size="large" endIcon={<ArrowForwardIcon />}>
                     Explore Pets
                   </Button>
-                  <Button component={Link} to="/register" variant="outlined" size="large">
-                    Create an account
-                  </Button>
+                  {auth ? (
+                    <Button component={Link} to="/orders" variant="outlined" size="large">
+                      My orders
+                    </Button>
+                  ) : (
+                    <Button component={Link} to="/register" variant="outlined" size="large">
+                      Create an account
+                    </Button>
+                  )}
                 </Stack>
               </Stack>
             </Grid>
@@ -121,6 +139,7 @@ function HomePage() {
           <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
             Shop by companion type
           </Typography>
+          <Box>
           <Grid container spacing={3}>
             {categoryCards.map((category) => (
               <Grid item xs={12} sm={6} key={category.name}>
@@ -138,6 +157,7 @@ function HomePage() {
               </Grid>
             ))}
           </Grid>
+          </Box>
         </Stack>
       </Container>
 
@@ -152,13 +172,14 @@ function HomePage() {
           {loading ? (
             <Typography color="text.secondary">Loading featured companions...</Typography>
           ) : (
+            <Box>
             <Grid container spacing={3}>
               {featuredPets.map((pet) => (
                 <Grid item xs={12} sm={6} md={3} key={pet.id}>
                   <Card sx={{ height: '100%' }}>
                     <CardMedia
                       component="img"
-                      image={pet.image || 'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=900&q=80'}
+                      image={petImage(pet)}
                       alt={pet.name}
                       sx={{ height: 220, objectFit: 'cover' }}
                     />
@@ -172,7 +193,7 @@ function HomePage() {
                         </Typography>
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
-                        {pet.species} • {pet.breed}
+                        {humanize(pet.species)} • {pet.breed}
                       </Typography>
                     </CardContent>
                     <CardActions>
@@ -184,6 +205,7 @@ function HomePage() {
                 </Grid>
               ))}
             </Grid>
+            </Box>
           )}
         </Stack>
       </Container>
@@ -204,7 +226,7 @@ function HomePage() {
                 Healthy pets
               </Typography>
               <Typography color="text.secondary">
-                Every listing is tracked through the catalog and inventory services so availability reflects live backend status.
+                Every listing shows live availability, so the companion you fall for is really waiting for you.
               </Typography>
             </Grid>
             <Grid item xs={12} md={4}>
@@ -212,7 +234,7 @@ function HomePage() {
                 Easy checkout
               </Typography>
               <Typography color="text.secondary">
-                Add your favorite companion to the cart, review your order, and complete checkout with the real order API.
+                Add your favorite companion to the cart, review your order, and follow it from checkout to your door.
               </Typography>
             </Grid>
           </Grid>

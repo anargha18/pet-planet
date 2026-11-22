@@ -128,7 +128,7 @@ const orderId = new URL(page.url()).pathname.split('/').pop();
 check('submit navigates to the order page', /^\d+$/.test(orderId), page.url());
 check('order page shows success banner', await waitText('Your order was placed'));
 check('order page polls until Confirmed', await waitText('Confirmed', 30000));
-check('timeline shows the shipment', await waitText('Shipment created', 30000));
+check('timeline shows the shipment', await waitText('Shipped with tracking number', 30000));
 check('notification shown', await waitText('is confirmed'));
 await shot('04-order-detail');
 
